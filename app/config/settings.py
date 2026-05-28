@@ -5,7 +5,10 @@ class settings(BaseSettings):
   model_config = SettingsConfigDict(
     env_file=".env",
     env_file_encoding="utf-8",
-    extra="ignore"
+    extra="ignore",
+    upload_dir="/data/uploads",
+    max_load_mb=10,
+    allwoed_suffixes=(".txt","docx")
   )
   """
     同名映射
