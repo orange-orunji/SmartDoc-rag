@@ -5,8 +5,8 @@ from openai import AsyncOpenAI,APIError
 def _client() -> AsyncOpenAI:
   c = get_settings()
   return AsyncOpenAI(
-    api_key= c.SILICONFLOW_API_KEY,
-    base_url= c.SILICONFLOW_BASE_URL
+    api_key= c.SILICON_API_KEY,
+    base_url= c.SILICON_BASE_URL
   )
 
 
@@ -19,7 +19,7 @@ async def stream_llm(messages: list[dict[str, str]]) -> AsyncIterator[str]:
     client = _client()
     try:
         stream = await client.chat.completions.create(
-            model=s.SILICONFLOW_MODEL,
+            model=s.SILICON_MODEL,
             messages=messages,
             stream=True,
         )

@@ -1,32 +1,38 @@
 from functools import lru_cache
+from typing import Tuple
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class settings(BaseSettings):
   model_config = SettingsConfigDict(
     env_file=".env",
     env_file_encoding="utf-8",
-    extra="ignore",
-    upload_dir="/data/uploads",
-    max_load_mb=10,
-    allwoed_suffixes=(".txt","docx")
+    extra="ignore"
   )
   """
     同名映射
   """
   # API配置
-  SILICONFLOW_API_KEY :str
-  SILICONFLOW_BASE_URL : str = "https://api.siliconflow.cn/v1"
-  SILICONFLOW_MODEL : str = "Qwen/Qwen2.5-7B-Instruct"
+  SILICON_API_KEY :str
+  SILICON_BASE_URL : str = "https://api.siliconflow.cn/v1"
+  SILICON_MODEL : str = "Qwen/Qwen2.5-7B-Instruct"
+
+  # chroma配置
+  CHROMA_DIR : str = "./data/storage/chroma_db"
+  CHROMA_NAME : str = "enterprise_knowledge"
+
+  # md5配置
+  MD5_PATH : str = "./data/storage/md5_records.txt"
 
   #文件上传配置
-  UPLOAD_DIR : str = "./data/storage/chroma_db"
-  UPLOAD_MIR : str = "./data/sotrage"
   MAX_FILE_SIZE : int = 10
-  ALLOWED_SUFFIXES : tuple[str] = (".txt",".docx", ".pdf", ".md")
+  ALLOWED_SUFFIXES : Tuple[str,...] = (".txt",".docx", ".pdf", ".md")
+  UPLOAD_DIR : str = "/data/uploads"
 
 #   文本切割配置
   CHUNK_SIZE : int = 500
   CHUNK_OVERLAP : int = 50
+  SEPARATORS : list[str] = ["\n\n", "\n", "\t", " ",".",",","!","?",";","。","，"]
 
 
 """

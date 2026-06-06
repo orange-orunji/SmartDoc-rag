@@ -10,9 +10,9 @@ class UnifiedResponse(BaseModel):
     data : Optional[Any] = None
 
     @staticmethod
-    def success(data:Any=None,message:str="success") -> dict:
+    def success(code:int = 200,data:Any=None,message:str="success") -> dict:
         return {
-            "code":200,
+            "code":code,
             "message":message,
             "data":data
         }
