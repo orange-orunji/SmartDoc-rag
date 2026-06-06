@@ -7,5 +7,5 @@ async def stream_chat(message : str) -> AsyncIterator[bytes]:
   """
   content_list = build_content(message)
   async for token in stream_llm(content_list):
-    yield f"data: {token}\n\n".encode("utf-8")
-  yield "data: [DONE]\n\n".encode("utf-8")
+    yield f"{token}".encode("utf-8")
+  yield " \ndata:[DONE]\n".encode("utf-8")

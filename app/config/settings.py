@@ -13,9 +13,21 @@ class settings(BaseSettings):
   """
     同名映射
   """
+  # API配置
   SILICONFLOW_API_KEY :str
   SILICONFLOW_BASE_URL : str = "https://api.siliconflow.cn/v1"
   SILICONFLOW_MODEL : str = "Qwen/Qwen2.5-7B-Instruct"
+
+  #文件上传配置
+  UPLOAD_DIR : str = "./data/storage/chroma_db"
+  UPLOAD_MIR : str = "./data/sotrage"
+  MAX_FILE_SIZE : int = 10
+  ALLOWED_SUFFIXES : tuple[str] = (".txt",".docx", ".pdf", ".md")
+
+#   文本切割配置
+  CHUNK_SIZE : int = 500
+  CHUNK_OVERLAP : int = 50
+
 
 """
   @lru_cache
