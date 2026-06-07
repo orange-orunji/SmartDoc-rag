@@ -69,17 +69,18 @@ class KnowledgeBaseService:
                 chunked_array = [data]
         #     进行向量存储
             # 定义存储信息(包含创建时间和创建人)
-            # TODO 2026.6.6待完善 记得做
-            base_message = {
+            metadatas = [{
                 "source": filename,
                 "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "operator": "system",
-                "md5": md_5
+                "md5": md_5,
+                "chunk_index": i,
+                "total_chunks": len(chunked_array)
             }
-            message = {
+                for i in range(len(chunked_array))
+            ]
 
-            }
-            self.chroma.add_texts(chunked_array,metadatas=[message.copy() for _ in range(len(chunked_array))])
+            self.chroma.add_texts(chunked_array,metadatas=metadatas)
         #     不存在则进行md5存储
             save_md5(self.s.MD5_PATH,md_5)
         except Exception as e:
