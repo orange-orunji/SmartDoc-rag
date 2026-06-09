@@ -38,6 +38,8 @@ class settings(BaseSettings):
 # vector返回相似度几个
   VECTOR_MAX_NUM : int = 3
 
+
+CHAT_HISTORY_STORAGY_PATH = "./chat_history"
 """
   @lru_cache
   定义共用同一份settings作为缓存

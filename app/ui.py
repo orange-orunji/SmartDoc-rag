@@ -77,7 +77,7 @@ if prompt := st.chat_input("输入你的问题..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("思考中..."):
+        with st.spinner("thinking..."):
             resp = requests.post(
                 "http://127.0.0.1:8000/api/chat/stream",
                 json={"question": prompt, "session_id": current_session},
