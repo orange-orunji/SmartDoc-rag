@@ -1,6 +1,6 @@
 from operator import itemgetter
 
-from langchain_community.embeddings import DashScopeEmbeddings
+from app.test_model.HyDE_option import hyde_retrieve
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough, RunnableWithMessageHistory, RunnableLambda, RunnableParallel
@@ -48,7 +48,7 @@ async def stream_llm(messages: list[dict[str, str]]) -> AsyncIterator[str]:
 def get_rag_chain():
     s = get_settings()
 
-    retriever = KnowledgeBaseService().chroma.as_retriever()
+    retriever = RunnableLambda(lambda p : hyde_retrieve(p))
 
     llm = ChatOpenAI(
         model=s.SILICON_MODEL,
@@ -73,7 +73,7 @@ def get_rag_chain():
     # 获取基础链对象
     chain = (
         RunnableParallel(
-            {"input": RunnablePassthrough(),
+            {"input": itemgetter("input"),
              "content": itemgetter("input") | retriever | RunnableLambda(__format_content),
              "history": itemgetter("history")}
         ) | prompt | llm | StrOutputParser()
@@ -87,9 +87,6 @@ def get_rag_chain():
     )
 
     return increase_chain
-
-def temp(dicts):
-    return {"input":dicts["input"]["input"],"content":dicts["content"],"history":dicts["input"]["history"]}
 
 
 def __format_content(documents):
@@ -108,7 +105,7 @@ if __name__ == '__main__':
         }
     }
     chain = get_rag_chain()
-    stream = chain.stream({"input":"我地理考了几分"}, config=configration)
+    stream = chain.stream({"input":"java和香蕉有什么关系"}, config=configration)
     for chunk in stream:
         print(chunk,end="",flush=True)
     # print(chain.invoke({"input": "什么是高考"}, config=configration))

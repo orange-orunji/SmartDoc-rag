@@ -17,6 +17,7 @@ class vector_store_service:
             persist_directory=self.s.CHROMA_DIR,
             collection_name=self.s.CHROMA_NAME
         )
-    def get_vector(self):
-        return self.chroma.as_retriever(search_kwarg={"k":self.s.VECTOR_MAX_NUM})
+
+    def get_vector(self,query: str, k: int = 3):
+        return self.chroma.similarity_search(query, k=k)
 
