@@ -3,6 +3,7 @@ from typing import Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+from app.services.rerank import rerank
 from app.config.settings import get_settings
 from app.services.vector_store import VectorStoreService
 
@@ -24,10 +25,14 @@ def generate_hypothetical(question : str) -> str:
     messages = prompt.format_messages(question=question)
     content = llm.invoke(messages)
     return content.content
+# 原版hyde检索
+# def hyde_retrieve(question : str,k : int = 3):
+#     return _vs.get_vector(query=generate_hypothetical(question),k=k)
 
+# rerank后hyde检索
 def hyde_retrieve(question : str,k : int = 3):
-    return _vs.get_vector(query=generate_hypothetical(question),k=k)
-
+    vector = _vs.get_vector(query=generate_hypothetical(question), k=k)
+    return rerank(query=generate_hypothetical(question),docs=vector,top_k=k)
 if __name__ == "__main__":
     q = "java相关资料？"
     docs = hyde_retrieve(q)
