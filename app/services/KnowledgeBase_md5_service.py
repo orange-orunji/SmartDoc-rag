@@ -7,6 +7,8 @@ from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config.settings import get_settings
 from app.schemas.response import UnifiedResponse
+"""切割/检查文本"""
+
 
 def check_md5(md5_file_path : str,md5_value : str):
     """检测文件md5是否存在,不存在则创建文件并返回false,成功返回True"""

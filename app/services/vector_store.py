@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config.settings import get_settings
 
-
+"""向量检索类"""
 class VectorStoreService:
     def __init__(self, embedding_model=None):
         self.embedding = embedding_model
