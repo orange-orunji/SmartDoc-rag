@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.services import vector_store
 from app.services.vector_store import VectorStoreService
 from app.services.bm25_service import BM25Service
+from app.database import engine,Base
 app = FastAPI(title="RAG Personal API")
 # 添加拦截器
 app.add_middleware(
@@ -37,6 +38,12 @@ async def build_bm25_index():
         ]
     BM25Service().build_index(all_docs)
     print(f"BM25 索引构建完成，文档数：{len(all_docs)}")
+
+"""启动时自动创建所有继承了...的表"""
+@app.on_event("startup")
+async def build_table_if_absent():
+    Base.metadata.create_all(bind=engine)
+
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app="main:app", reload=True)
