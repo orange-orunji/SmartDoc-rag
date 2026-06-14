@@ -1,3 +1,6 @@
+from app.services.bm25_service import BM25Service
+from app.services.vector_store import vector_store_service
+
 from io import BytesIO
 from pathlib import Path
 
@@ -72,6 +75,10 @@ async def upload_documents(content: bytes, filename: str | None) -> UnifiedRespo
     # 向量化存储
     kb_service = KnowledgeBaseService()
     result = kb_service.upload_by_str(text, filename)
+
+    # 在你的 upload 函数末尾，向量化存储完成后：
+    all_docs = vector_store_service.get_all_documents()  # 获取所有文档
+    BM25Service().build_index(all_docs)  # 重建 BM25 索引
 
     return UnifiedResponse(
         code=200,
