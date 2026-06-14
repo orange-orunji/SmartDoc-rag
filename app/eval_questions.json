@@ -1,0 +1,122 @@
+[
+  {
+    "question": "在软件开发领域，技术人员通常如何定位自己的角色？",
+    "expected_keywords": ["AI 业务落地", "Java 工程化", "高并发", "企业级产品"]
+  },
+  {
+    "question": "构建智能化系统时，可以从哪些方面优化数据存取性能？",
+    "expected_keywords": ["MySQL", "索引优化", "事务隔离级别", "MVCC", "SQL 调优"]
+  },
+  {
+    "question": "在分布式环境下，有哪些保障资源独占访问的机制？",
+    "expected_keywords": ["Redis", "SETNX", "过期时间", "Redisson", "看门狗机制"]
+  },
+  {
+    "question": "一种结合检索与生成的增强方法，其典型处理链路是怎样的？",
+    "expected_keywords": ["检索增强生成", "HyDE", "Rerank", "向量检索", "BM25"]
+  },
+  {
+    "question": "异步通信组件在应对瞬时高并发请求时，能带来哪些好处？",
+    "expected_keywords": ["RabbitMQ", "削峰填谷", "异步下单", "死信队列", "可靠性保障"]
+  },
+  {
+    "question": "这个流行的Java开发框架提供了哪些关键能力？",
+    "expected_keywords": ["IOC", "AOP", "自动配置", "起步依赖", "Spring Security"]
+  },
+  {
+    "question": "怎样改进增强式检索，让它找到更符合意图的内容？",
+    "expected_keywords": ["HyDE", "假设文档", "Rerank", "混合检索", "召回率"]
+  },
+  {
+    "question": "一种专门用于重排序的模型，与基础的语义相似度匹配有什么不同？",
+    "expected_keywords": ["Cross-Encoder", "重排序", "精度", "交叉编码", "相关性分数"]
+  },
+  {
+    "question": "就读于普通院校的低年级学生，该如何为智能化应用的工程实习做准备？",
+    "expected_keywords": ["Java 基础", "Spring Boot", "AI 应用开发", "RAG", "项目经验"]
+  },
+  {
+    "question": "用结构化的方式描述个人经历时，可以遵循什么样的叙述框架？",
+    "expected_keywords": ["情境", "任务", "行动", "结果", "量化", "S.T.A.R."]
+  },
+  {
+    "question": "Java运行环境是如何划分和组织内存区域的？",
+    "expected_keywords": ["堆", "栈", "方法区", "GC", "类加载机制"]
+  },
+  {
+    "question": "并发编程中的哈希表是如何保障多线程访问安全的？",
+    "expected_keywords": ["分段锁", "CAS", "synchronized", "线程安全", "并发"]
+  },
+  {
+    "question": "缓存系统中，常见的几种导致数据失效或异常访问的情形是什么？",
+    "expected_keywords": ["布隆过滤器", "空对象", "互斥锁", "过期随机化", "Redis"]
+  },
+  {
+    "question": "对话式的开发框架是如何保持上下文并进行多轮交互的？",
+    "expected_keywords": ["ConversationalRetrievalChain", "Memory", "RunnableWithMessageHistory", "历史记录"]
+  },
+  {
+    "question": "如何将应用程序打包并在容器化平台上运行？",
+    "expected_keywords": ["Dockerfile", "镜像构建", "docker-compose", "容器化", "端口映射"]
+  },
+  {
+    "question": "专门存储高维特征向量的数据库，能为应用带来什么独特的价值？",
+    "expected_keywords": ["向量存储", "Embedding", "语义检索", "相似度搜索", "持久化"]
+  },
+  {
+    "question": "从事生成式AI产品的工程化落地，需要培养哪些方面的能力？",
+    "expected_keywords": ["Java", "AI 落地", "SSE 流式输出", "RAG", "高并发"]
+  },
+  {
+    "question": "在现有的服务端项目中，有哪些方式可以集成智能处理能力？",
+    "expected_keywords": ["Spring AI", "LangChain4j", "RAG", "模型接入", "向量库"]
+  },
+  {
+    "question": "服务端主动向客户端推送数据的技术，其工作原理是什么？",
+    "expected_keywords": ["Server-Sent Events", "text/event-stream", "单向推送", "打字机效果"]
+  },
+  {
+    "question": "消息中间件里，处理失败的消息会被怎样安置，这有什么实际用途？",
+    "expected_keywords": ["消息重试失败", "DLX", "订单超时回滚", "可靠性"]
+  },
+  {
+    "question": "在信息管理系统中，怎样有效组织和维持对话会话的状态？",
+    "expected_keywords": ["session_id", "历史记录", "多租户隔离", "FileChatHistory", "RunnableWithMessageHistory"]
+  },
+  {
+    "question": "一种基于词频和文档匹配的传统搜索算法，其核心思想是什么？",
+    "expected_keywords": ["关键词匹配", "TF-IDF", "精确查询", "混合检索", "词频"]
+  },
+  {
+    "question": "将频繁使用的数据放在内存中存储，主要是出于哪些考虑？",
+    "expected_keywords": ["性能", "低延迟", "高并发", "减少 DB 压力", "缓存策略"]
+  },
+  {
+    "question": "应用安全层面的身份认证，通常是借助什么机制实现的？",
+    "expected_keywords": ["Filter", "JWT", "表单登录", "授权", "SecurityConfig"]
+  },
+  {
+    "question": "在微服务架构中，为了防止流量过载，一般会采用哪些控制策略？",
+    "expected_keywords": ["Redis + Lua", "滑动窗口", "令牌桶", "防刷", "高并发"]
+  },
+  {
+    "question": "通过生成假设性答案来改进搜索，这种方法为什么有效？",
+    "expected_keywords": ["假设文档", "LLM 生成", "语义桥接", "向量检索", "假答案"]
+  },
+  {
+    "question": "若要掌握并发编程，应该重点学习哪些核心知识？",
+    "expected_keywords": ["JUC", "线程池", "锁", "volatile", "AQS"]
+  },
+  {
+    "question": "面试中讲述项目经历时，怎样运用结构化方法增强说服力？",
+    "expected_keywords": ["业务场景", "目标", "优化行动", "量化结果", "亮点"]
+  },
+  {
+    "question": "向量数据库里，类似“集合”或“命名空间”的概念是为了解决什么问题？",
+    "expected_keywords": ["数据隔离", "集合", "命名空间", "向量库", "逻辑分区"]
+  },
+  {
+    "question": "求职时，一个技术人员最核心的定位或标签可以是什么？",
+    "expected_keywords": ["AI 业务落地", "Java 工程化", "高并发", "企业级产品"]
+  }
+]
