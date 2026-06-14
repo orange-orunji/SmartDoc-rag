@@ -118,5 +118,49 @@
   {
     "question": "求职时，一个技术人员最核心的定位或标签可以是什么？",
     "expected_keywords": ["AI 业务落地", "Java 工程化", "高并发", "企业级产品"]
+  },
+  {
+    "question": "Redisson 的看门狗机制默认锁续期时间是多少？",
+    "expected_keywords": ["30秒", "30s", "30000ms"]
+  },
+  {
+    "question": "RocketMQ 默认的 NameServer 端口是什么？",
+    "expected_keywords": ["9876"]
+  },
+  {
+    "question": "MySQL 默认的 InnoDB 事务隔离级别是哪个？",
+    "expected_keywords": ["REPEATABLE READ", "可重复读"]
+  },
+  {
+    "question": "Spring Boot 内置的 Tomcat 最大线程数默认是多少？",
+    "expected_keywords": ["200"]
+  },
+  {
+    "question": "Redis 默认的数据持久化方式有哪两种？",
+    "expected_keywords": ["RDB", "AOF"]
+  },
+  {
+    "question": "Elasticsearch 中用于地理空间查询的数据类型是什么？",
+    "expected_keywords": ["geo_point", "geo_shape"]
+  },
+  {
+    "question": "JVM 中年轻代与老年代的默认比例是多少？",
+    "expected_keywords": ["1:2", "1:2"]
+  },
+  {
+    "question": "Netty 中处理 I/O 事件的线程池通常叫什么？",
+    "expected_keywords": ["EventLoopGroup", "NioEventLoopGroup"]
+  },
+  {
+    "question": "Docker 中查看容器日志的命令是哪一个？",
+    "expected_keywords": ["docker logs", "logs"]
+  },
+  {
+    "question": "HashMap 的默认负载因子是多少？",
+    "expected_keywords": ["0.75", "0.75f"]
   }
+,
+  {"question": "P7 薪资是多少？", "expected_keywords": ["P7", "20k", "35k"]},
+  {"question": "RabbitMQ 默认端口？", "expected_keywords": ["5672"]},
+  {"question": "Spring Boot 启动端口？", "expected_keywords": ["8080"]}
 ]
