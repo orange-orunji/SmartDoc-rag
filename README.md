@@ -44,5 +44,5 @@ cp .env.example .env
 ### 2.运行项目
 uvicorn main:app --reload  #运行后端
 
-streamlit run ui.py    #运行前端界面后，进入http://localhost:8501界面访问项目
+streamlit run ui.py    #运行前端界面后，进入http://localhost:8501
 
