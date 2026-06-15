@@ -5,11 +5,11 @@
 ## 🧱 技术架构
 
 ```text
-用户 → Streamlit 前端 → FastAPI 后端 → LangChain RAG 链
-                                    ├── Chroma 向量库
-                                    ├── HyDE 假设文档生成
-                                    ├── BM25 关键词索引
-                                    └── BGE-Reranker 重排序
+登录   ->   JWT认证   ->   用户   →  Streamlit 前端    →  FastAPI 后端   →   LangChain RAG 链
+ └──SQLite 本地文件存储       └──用户id会话隔离               ├── Chroma 向量库
+                                                            ├── HyDE 假设文档生成
+                                                            ├── BM25 关键词索引
+                                                            └── BGE-Reranker 重排序
 ```
 ## ✨ 核心亮点
 
@@ -31,6 +31,31 @@
 > ⚡ 核心发现：HyDE+Rerank 在语义模糊场景下提升最显著；BM25 需在更大语料与精确查询中发挥作用。  
 > 📄 详细实验分析见 [`EVALUATION.md`](./EVALUATION.md)。
 
+## 📂 项目结构
+```text
+  RAG_Personal
+     └── app/
+          ├── api/ # FastAPI 接口层
+          │ ├── auth.py # 注册/登录
+          │ ├── chat.py # 对话流式、历史、会话管理
+          │ └── document.py # 文档上传
+          ├── services/ # 业务逻辑层
+          │ ├── llm.py # RAG 链构建
+          │ ├── hyde.py # HyDE 检索增强
+          │ ├── bm25_service.py # BM25 关键词索引
+          │ ├── rerank.py # BGE-Reranker 重排序
+          │ ├── vector_store.py # Chroma 向量库封装
+          │ └── history_service.py # 文件历史存储
+          ├──scheemas # 请求响应体对象包
+          ├── models/ # 数据库模型
+          ├── utils/ # JWT、密码、Redis 等工具
+          ├── config/ # 配置文件
+          ├── database.py # SQL
+          ├── eval_questions.json  #测评文本
+          ├── eval_retrieval.py # 检索质量评测脚本
+          └── ui.py # 前端界面
+```
+
 ## 🚀快速开始
 ### 1. 环境准备
 
@@ -45,4 +70,9 @@ cp .env.example .env
 uvicorn main:app --reload  #运行后端
 
 streamlit run ui.py    #运行前端界面后，进入http://localhost:8501
+
+## 😳 后期完善方向
+### 1.redis缓存
+### 2.docker部署
+### 3.历史文件索引和删除操作
 
