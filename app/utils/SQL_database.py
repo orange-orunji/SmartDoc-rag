@@ -21,3 +21,5 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 创建数据库模型基类, Base 是所有模型类的父类，继承它才能建表
 Base = declarative_base()
+
+# 创建redis连接

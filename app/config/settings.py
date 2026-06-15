@@ -40,6 +40,11 @@ class settings(BaseSettings):
     # 聊天历史存储路径 —— 使用绝对路径，固定在 app/data/chat_history
     CHAT_HISTORY_STORAGY_PATH: str = str(BASE_DIR / "app/data/chat_history")
 
+    # redis 配置
+    REDIS_HOST = "localhost"
+    REDIS_POST = 6379
+    REDIS_DB = 1
+
 @lru_cache
 def get_settings() -> settings:
     return settings()
