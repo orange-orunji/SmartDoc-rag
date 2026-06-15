@@ -13,12 +13,14 @@
 ```
 ## ✨ 核心亮点
 
-- **多格式文档解析**：支持 PDF、Word (.docx)、Markdown、TXT 文件自动解析与向量化  
-- **智能检索增强**：集成 **HyDE（假设文档嵌入）**、**BGE-Reranker 重排序**、**BM25 关键词检索**，构建三阶混合检索架构  
-- **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯  
-- **流式响应**：服务端 SSE 推送，前端逐字打字机效果，提升用户体验  
-- **会话管理**：可新建/切换/搜索历史会话，每个会话独立保持上下文  
-- **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本，对比不同检索策略效果（详见 [`EVALUATION.md`](./EVALUATION.md)）
+- **多格式文档解析**: 支持PDF、Word (.docx)、Markdown、TXT 文件自动解析与向量化  
+- **智能检索增强**: 集成**HyDE（假设文档嵌入）**、**BGE-Reranker 重排序**、**BM25 关键词检索**，构建三阶混合检索架构  
+- **多轮对话记忆**: 基于LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯  
+- **流式响应**: 服务端 SSE 推送，前端逐字打字机效果，提升用户体验  
+- **会话管理**: 可新建/切换历史会话，每个会话独立保持上下文  
+- **量化评估体系**: 内置 Recall@K、MRR 自动化评测脚本，对比不同检索策略效果（详见 [`EVALUATION.md`](./EVALUATION.md)）
+- **redis热点缓存**: 添加redis缓存用户问题,在用户询问重复问题的情况下提高运行效率
+
 
 ## 📊 检索策略对比（Top-1 召回率）
 | 策略 | 纯模糊问题 (30) | 混合问题 (30模糊+13精确) |
@@ -46,11 +48,13 @@
           │ ├── rerank.py # BGE-Reranker 重排序
           │ ├── vector_store.py # Chroma 向量库封装
           │ └── history_service.py # 文件历史存储
-          ├──scheemas # 请求响应体对象包
+          ├──schemas # 请求响应体对象包
           ├── models/ # 数据库模型
           ├── utils/ # JWT、密码、Redis 等工具
+          │ ├── auth.py  # JWT令牌、密码加密对比方法
+          │ ├── redis_client.py #获取redis客户端
+          │ └── database.py # 获取SQL客户端
           ├── config/ # 配置文件
-          ├── database.py # SQL
           ├── eval_questions.json  #测评文本
           ├── eval_retrieval.py # 检索质量评测脚本
           └── ui.py # 前端界面
