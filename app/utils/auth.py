@@ -1,6 +1,10 @@
-from jose import jwt
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
 from passlib.context import CryptContext
 from datetime import datetime,timedelta
+
+from streamlit import status
 
 SECRET_ID = "my_secret_key_for_demo" # 加密前缀
 ALGORITHM = "HS256" # 加密方式
@@ -22,9 +26,19 @@ def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_ID, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, str(SECRET_ID), algorithm=ALGORITHM)
 
 
 def decode_token(token : str) -> dict:
     """解析JWT令牌方法,拿到令牌中的用户信息"""
     return jwt.decode(token,SECRET_ID,algorithms=[ALGORITHM])
+
+security = HTTPBearer()
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """注入管理状态验证方法"""
+    token = credentials.credentials
+    try:
+        payload = decode_token(token)
+        return payload  # {"user_id": 1, "sub": "test", ...}
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的 Token")

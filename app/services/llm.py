@@ -44,7 +44,7 @@ async def stream_llm(messages: list[dict[str, str]]) -> AsyncIterator[str]:
         return
 
 
-def get_rag_chain():
+def get_rag_chain(user_id: str):
     s = get_settings()
     llm = ChatOpenAI(
         model=s.SILICON_MODEL,
@@ -75,10 +75,15 @@ def get_rag_chain():
              "history": itemgetter("history")}
         )  | prompt | llm | StrOutputParser()
     )
+
+    # 创建一个绑定 user_id 的历史记录工厂函数
+    def _session_history(session_id: str):
+        return get_file_chat_history(session_id, user_id)
+
     # 获取增强链对象
     increase_chain = RunnableWithMessageHistory(
         chain,
-        get_file_chat_history,
+        _session_history,
         input_messages_key="input",
         history_messages_key="history"
     )

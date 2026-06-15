@@ -55,7 +55,7 @@ class KnowledgeBaseService:
             separators=self.s.SEPARATORS
         )
 
-    def upload_by_str(self, data : str,filename) -> UnifiedResponse:
+    def upload_by_str(self, data : str,filename ,user_id: str = "system") -> UnifiedResponse:
 #       获取当前数据的MD5值
         md_5 = get_string_md5(data)
 #       判断是否存在该MD5值
@@ -74,7 +74,7 @@ class KnowledgeBaseService:
             metadatas = [{
                 "source": filename,
                 "create_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "operator": "system",
+                "operator": user_id,
                 "md5": md_5,
                 "chunk_index": i,
                 "total_chunks": len(chunked_array)

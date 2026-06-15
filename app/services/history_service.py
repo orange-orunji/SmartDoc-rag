@@ -10,11 +10,16 @@ from langchain_core.messages import BaseMessage,message_to_dict,messages_from_di
 
 class FileChatHistory(BaseChatMessageHistory):
 
-    def __init__(self,session_id,storage_path):
+    def __init__(self,session_id,user_id,storage_path):
         self.session_id = session_id
         self.storage_path = storage_path
+        self.user_id = user_id
         os.makedirs(storage_path, exist_ok=True)
-        self.file_path = os.path.join(storage_path,session_id)
+        self.user_dir = os.path.join(storage_path,user_id)
+        os.makedirs(self.user_dir, exist_ok=True)
+        # 文件名为 {session_id}.json
+        self.file_path = os.path.join(self.user_dir, f"{session_id}.json")
+
     """添加历史记忆文档"""
     def add_message(self,messages:BaseMessage) -> None:
         current_messages = self.messages.copy()
@@ -46,5 +51,5 @@ class FileChatHistory(BaseChatMessageHistory):
         with open(self.file_path,"w",encoding="utf-8"):
             pass
 s = settings.get_settings()
-def get_file_chat_history(session_id):
-    return FileChatHistory(session_id,s.CHAT_HISTORY_STORAGY_PATH)
+def get_file_chat_history(session_id :str ,user_id : str):
+    return FileChatHistory(session_id,str(user_id),s.CHAT_HISTORY_STORAGY_PATH)
