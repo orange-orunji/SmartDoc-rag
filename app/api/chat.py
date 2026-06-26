@@ -11,8 +11,14 @@ from app.services.llm import get_rag_chain
 from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
 from app.config.settings import get_settings
+
 router = APIRouter()
 s = get_settings()
+
+
+def _sse_escape(text: str) -> str:
+    """将换行符转义，防止破坏 SSE 协议格式"""
+    return text.replace('\n', '\\n')
 """
 流式输出接口
 """
@@ -27,7 +33,7 @@ async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_cur
     # 缓存命中则进行流
     if redis_chat_history:
         async def cache_stream():
-            yield f"data: {redis_chat_history}\n\n"
+            yield f"data: {_sse_escape(redis_chat_history)}\n\n"
             yield "data: [DONE]\n\n"
         return StreamingResponse(cache_stream(),200,media_type="text/event-stream")
 
@@ -39,11 +45,11 @@ async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_cur
                 {"input": request.question},
                 config={"configurable": {"session_id": request.session_id, "user_id": user_id}}
             ):
-                all_request+=chunk
-                yield f"data: {chunk}\n\n"
+                all_request += chunk
+                yield f"data: {_sse_escape(chunk)}\n\n"
         except Exception as e:
             # 发送错误消息给前端，避免连接突然中断
-            yield f"data: 【系统错误】{str(e)}\n\n"
+            yield f"data: 【系统错误】{_sse_escape(str(e))}\n\n"
         finally:
             if all_request:
                 redis.setex(name=user_key,value=all_request,time=s.REDIS_EXPIRE)
@@ -79,3 +85,17 @@ async def get_user_sessions(current_user: dict = Depends(get_current_user)):
         if f.endswith('.json')
     ]
     return {"sessions": sessions}
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    """删除指定会话"""
+    user_id = str(current_user["user_id"])
+    storage_path = s.CHAT_HISTORY_STORAGY_PATH
+    file_path = os.path.join(storage_path, user_id, f"{session_id}.json")
+
+    if not os.path.exists(file_path):
+        return {"code": 404, "message": "会话不存在"}
+
+    os.remove(file_path)
+    return {"code": 200, "message": f"会话 {session_id} 已删除"}

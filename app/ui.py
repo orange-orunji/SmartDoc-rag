@@ -80,7 +80,6 @@ st.title("📚 企业文档智能问答")
 def format_message(text: str) -> str:
     text = text.replace('<br>', '\n').replace('<br/>', '\n').replace('&lt;br&gt;', '\n')
     text = text.replace('\\n', '\n')
-    text = text.replace('\n', '\n\n')
     return text
 
 # ===================== 会话管理 =====================
@@ -140,19 +139,68 @@ with st.sidebar:
     else:
         display_sessions = user_sessions
 
+    if "delete_confirm" not in st.session_state:
+        st.session_state.delete_confirm = False
+
     if display_sessions:
         st.subheader("💬 我的会话")
+        selectbox_options = display_sessions + ["──────────", "🗑️ 删除当前会话"]
+        try:
+            default_index = display_sessions.index(current_session)
+        except ValueError:
+            default_index = 0
+
         selected = st.selectbox(
             "选择一个会话",
-            options=display_sessions,
-            index=0,
-            key=f"session_selector_{st.session_state.session_selector_key}"
+            options=selectbox_options,
+            index=default_index,
+            key=f"session_selector_{st.session_state.session_selector_key}",
+            label_visibility="collapsed"
         )
-        if selected and selected != current_session:
+
+        # 选择了分隔线 → 重置回当前会话
+        if selected == "──────────":
+            st.session_state.session_selector_key += 1
+            st.rerun()
+
+        # 选择了删除 → 弹出确认提示（同时重置 selectbox 防止循环触发）
+        if selected == "🗑️ 删除当前会话":
+            st.session_state.session_selector_key += 1
+            st.session_state.delete_confirm = True
+            st.rerun()
+
+        # 正常切换会话
+        if selected and selected != current_session and not selected.startswith("─") and selected != "🗑️ 删除当前会话":
             st.session_state.current_session = selected
             st.session_state.messages = []
             st.query_params["session_id"] = selected
             st.rerun()
+
+        # 删除确认弹窗（先确认再执行）
+        if st.session_state.delete_confirm:
+            st.warning(f"⚠️ 确定要删除此会话吗？")
+            st.caption(f"`{current_session}`")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ 确认删除", key="confirm_del", use_container_width=True):
+                    requests.delete(
+                        f"http://127.0.0.1:8000/api/chat/session/{current_session}",
+                        headers=auth_headers
+                    )
+                    st.session_state.delete_confirm = False
+                    raw_id = str(uuid.uuid4())[:8]
+                    new_id = f"{st.session_state.user}_{raw_id}"
+                    st.session_state.current_session = new_id
+                    st.session_state.messages = []
+                    st.query_params["session_id"] = new_id
+                    st.session_state.session_selector_key += 1
+                    st.rerun()
+            with c2:
+                if st.button("❌ 取消", key="cancel_del", use_container_width=True):
+                    st.session_state.delete_confirm = False
+                    st.rerun()
+
+        st.caption(":red[下拉到底 → 🗑️ 删除当前会话]")
     else:
         # 如果连当前会话都没有，显示提示
         st.caption("暂无会话，请新建一个")
@@ -196,6 +244,9 @@ if prompt := st.chat_input("输入你的问题..."):
 
             for chunk in resp.iter_lines(decode_unicode=True):
                 if chunk:
+                    # 跳过 SSE 结束标记
+                    if chunk == "data: [DONE]":
+                        continue
                     text = chunk[6:] if chunk.startswith("data: ") else chunk
                     full_response += text
                     placeholder.text(full_response)
