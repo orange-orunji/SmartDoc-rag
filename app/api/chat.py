@@ -10,6 +10,7 @@ from app.services.history_service import get_file_chat_history
 from app.services.llm import get_rag_chain
 from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
+from app.utils.semantic_cache import semantic_cache
 from app.config.settings import get_settings
 
 router = APIRouter()
@@ -24,11 +25,20 @@ def _sse_escape(text: str) -> str:
 """
 @router.post("/stream")
 async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user["user_id"]
-    question_hash = hashlib.md5(request.question.encode()).hexdigest()
-    user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
+    user_id = str(current_user["user_id"])
 
     if redis:
+        # 1. 语义相似度缓存
+        cached_answer = semantic_cache.lookup(request.question, user_id)
+        if cached_answer:
+            async def cache_stream():
+                yield f"data: {_sse_escape(cached_answer)}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(cache_stream(), 200, media_type="text/event-stream")
+
+        # 2. MD5 精确匹配缓存（兜底）
+        question_hash = hashlib.md5(request.question.encode()).hexdigest()
+        user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
         redis_chat_history = redis.get(user_key)
         if redis_chat_history:
             async def cache_stream():
@@ -50,7 +60,10 @@ async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_cur
             yield f"data: 【系统错误】{_sse_escape(str(e))}\n\n"
         finally:
             if all_request and redis:
+                question_hash = hashlib.md5(request.question.encode()).hexdigest()
+                user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
                 redis.setex(name=user_key, value=all_request, time=s.REDIS_EXPIRE)
+                semantic_cache.store(request.question, user_id, all_request)
             yield "data: [DONE]\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
