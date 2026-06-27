@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from app.api.chat import router as chat_router
 from app.api.document import router as document_router
 from app.api.auth import router as auth_router
@@ -25,6 +26,16 @@ app.include_router(document_router, prefix="/api/document", tags=["上传文件�
 app.include_router(auth_router, prefix="/api/auth", tags=["用户登录注册相关接口"])
 
 
+@app.get("/")
+async def redirect_to_frontend():
+    """根路径重定向到前端页面"""
+    return RedirectResponse(url="/static/index.html")
+
+
+# 静态文件服务（HTML 前端）
+app.mount("/static", StaticFiles(directory="app/static", html=True), name="static")
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
@@ -47,7 +58,7 @@ async def build_bm25_index():
         all_docs = vector_store.chroma.get()
         all_docs = [
             Document(page_content=text, metadata=meta)
-            for text, meta in zip(all_docs['documents'], all_docs['metadatas'])
+            for text, meta in zip(all_docs["documents"], all_docs["metadatas"])
         ]
     BM25Service().build_index(all_docs)
     print(f"BM25 索引构建完成，文档数：{len(all_docs)}")
@@ -61,5 +72,3 @@ async def build_table_if_absent():
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app="main:app", reload=True)
-
-

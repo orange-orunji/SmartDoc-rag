@@ -1,11 +1,11 @@
 import hashlib
+import json
+import os
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends
 
-import os
-
-from app.schemas.chat import ChatRequest
+from app.schemas.chat import ChatRequest, RenameRequest
 from app.services.history_service import get_file_chat_history
 from app.services.llm import get_rag_chain
 from app.utils.auth import get_current_user
@@ -110,3 +110,29 @@ async def delete_session(session_id: str, current_user: dict = Depends(get_curre
 
     os.remove(file_path)
     return {"code": 200, "message": f"会话 {session_id} 已删除"}
+
+
+@router.put("/session/{session_id}/rename")
+async def rename_session(session_id: str, request: RenameRequest, current_user: dict = Depends(get_current_user)):
+    """重命名指定会话"""
+    user_id = str(current_user["user_id"])
+    storage_path = s.CHAT_HISTORY_STORAGY_PATH
+    user_dir = os.path.join(storage_path, user_id)
+    old_path = os.path.join(user_dir, f"{session_id}.json")
+    new_name = request.new_name.strip()
+
+    new_path = os.path.join(user_dir, f"{new_name}.json")
+    if os.path.exists(new_path):
+        return {"code": 409, "message": "该名称已存在，请使用其他名称"}
+
+    # 确保用户目录存在
+    os.makedirs(user_dir, exist_ok=True)
+
+    if os.path.exists(old_path):
+        os.rename(old_path, new_path)
+    else:
+        # 新会话还没有文件，直接创建空文件
+        with open(new_path, "w", encoding="utf-8") as f:
+            json.dump([], f)
+
+    return {"code": 200, "message": "重命名成功", "data": {"new_name": new_name}}

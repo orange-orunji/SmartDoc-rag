@@ -9,7 +9,7 @@
 ## 🧱 技术架构
 
 ```
-登录 → JWT 认证 → 用户 → Streamlit 前端 → FastAPI 后端 → LangChain RAG 链
+登录 → JWT 认证 → 用户 → HTML 前端（FastAPI 内置） → LangChain RAG 链
   ├── SQLite 用户存储
   └── 用户 ID 会话隔离
                  后端服务：
@@ -20,6 +20,8 @@
                  └── Redis 热点缓存
 ```
 
+> 前端为纯 HTML/CSS/JS 单页应用，由 FastAPI 直接托管，无需额外进程。
+
 ## ✨ 核心亮点
 
 - **多格式文档解析**：支持 PDF、Word(.docx)、Markdown、TXT 文件自动解析与向量化
@@ -27,9 +29,11 @@
 - **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯
 - **流式响应**：服务端 SSE 推送，前端逐字打字机效果
 - **多用户认证与隔离**：JWT 认证 + Cookie 持久化登录，用户数据完全物理隔离
-- **会话管理**：可新建、切换、搜索历史会话，每个会话独立保持上下文
+- **Markdown 实时渲染**：流式响应支持表格、代码块、标题、列表等 Markdown 格式实时渲染
+- **会话管理**：可新建、切换、重命名、删除会话，每个会话独立保持上下文
 - **Redis 热点缓存**：缓存高频问题，避免重复推理，响应延迟从 23s 降至 0.01s
 - **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本，对比不同检索策略效果
+- **纯 HTML 单页前端**：零依赖浏览器端渲染，由 FastAPI 内置托管，无需前端框架或额外进程
 
 ## 📊 检索策略对比（Top-1 召回率）
 
@@ -46,14 +50,14 @@
 
 ```
 RAG_Personal/
-├── main.py                         # FastAPI 入口
-├── download_models.py              # 下载 BGE-Reranker 模型
-├── requirements.txt                # Python 依赖
+├── main.py                         # FastAPI 入口，同时托管前端
 ├── app/
 │   ├── api/                        # FastAPI 接口层
 │   │   ├── auth.py                 # 注册/登录
-│   │   ├── chat.py                 # 对话流式、历史、会话管理
+│   │   ├── chat.py                 # 对话流式、历史、会话管理（含重命名）
 │   │   └── document.py             # 文档上传
+│   ├── static/
+│   │   └── index.html              # HTML 单页前端
 │   ├── services/                   # 业务逻辑层
 │   │   ├── llm.py                  # RAG 链构建
 │   │   ├── hyde.py                 # HyDE 检索增强
@@ -74,7 +78,9 @@ RAG_Personal/
 │   ├── eval_questions.json         # 评测问题集
 │   ├── eval_retrieval.py           # 检索质量评测脚本
 │   ├── redis_retrieval.py          # Redis 压测脚本
-│   └── ui.py                       # Streamlit 前端界面
+│   └── ui.py                       # Streamlit 前端界面（旧版，已由 HTML 替代）
+├── download_models.py              # 下载 BGE-Reranker 模型
+├── requirements.txt                # Python 依赖
 └── models/                         # （需自行下载）BGE-Reranker 模型
 ```
 
@@ -135,20 +141,28 @@ redis-server
 
 ### 5. 运行项目
 
-**启动后端**：
 ```bash
-uvicorn main:app --reload
+# 一键启动（前端 + 后端同一进程，访问 http://127.0.0.1:8000）
+python main.py
+
+# 如端口被占用，指定其他端口
+python -m uvicorn main:app --host 127.0.0.1 --port 9000
 ```
 
-**启动前端**：
-```bash
-streamlit run app/ui.py
-```
+浏览器访问 `http://127.0.0.1:8000` 即可体验。
 
-浏览器访问 `http://localhost:8501` 即可体验。
+> **注意**：HTML 前端已内置于 FastAPI 中，无需额外启动 Streamlit。旧版 Streamlit 前端（`app/ui.py`）仍保留可用。
+
+## 🔧 常见问题
+
+| 问题 | 解决方法 |
+|------|---------|
+| 端口 8000 被占用 | `netstat -ano \| findstr :8000` 查看 PID，`taskkill /F /PID <号>` 释放 |
+| 页面加载不出来 | 确认已执行 `pip install aiofiles`，重启后端 |
+| 重命名会话失败 | 需先发送一条消息创建会话文件，或刷新页面后重试 |
 
 ## 😳 后续规划
 
 - **Docker 一键部署**：编写 Dockerfile 和 docker-compose，实现容器化交付
-- **历史文件索引和删除操作**：支持会话重命名、删除，以及历史记录的全文检索
-- **前端 UI 优化**：提升移动端适配和交互体验
+- **会话全文检索**：支持历史会话内容的全文搜索与过滤
+- **文档管理增强**：已上传文档的列表查看、删除与重向量化
