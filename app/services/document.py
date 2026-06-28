@@ -40,9 +40,6 @@ async def _extract_text(content: bytes, suffix: str) -> str:
 
 def validate_upload(content: bytes, filename: str | None) -> UnifiedResponse | None:
     """纯校验：仅检查文件大小和格式，通过返回 None，不通过返回错误响应"""
-    if not filename:
-        return UnifiedResponse(code=400, message="文件名不能为空")
-
     settings = get_settings()
     path = Path(filename)
     suffix = path.suffix.lower()

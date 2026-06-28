@@ -1,6 +1,21 @@
 # 企业知识库智能问答系统
 
-基于 FastAPI + LangChain + Chroma 构建的企业级 RAG 知识库系统，支持多格式文档上传、三阶混合检索、多用户认证与对话管理、热点问题缓存，并具备自动化检索质量评估体系。
+基于 FastAPI + LangChain + Chroma + RabbitMQ + Redis 构建的企业级 RAG 知识库系统，支持多格式文档异步上传、三阶混合检索、多层热点缓存、多用户认证与对话管理，并内置自动化检索质量评估体系。
+
+---
+
+## 📑 目录
+
+- [项目背景](#-项目背景)
+- [技术架构](#-技术架构)
+- [核心亮点](#-核心亮点)
+- [检索策略对比](#-检索策略对比)
+- [项目结构](#-项目结构)
+- [快速开始](#-快速开始)
+- [常见问题](#-常见问题)
+- [更新日志](#更新日志)
+
+---
 
 ## ⭐ 项目背景
 
@@ -9,15 +24,22 @@
 ## 🧱 技术架构
 
 ```
-登录 → JWT 认证 → 用户 → HTML 前端（FastAPI 内置） → LangChain RAG 链
-  ├── SQLite 用户存储
-  └── 用户 ID 会话隔离
-                 后端服务：
-                 ├── Chroma 向量库
-                 ├── HyDE 假设文档生成
-                 ├── BM25 关键词索引
-                 ├── BGE-Reranker 重排序
-                 └── Redis 热点缓存
+浏览器（HTML 单页前端） 
+│ ▼ FastAPI 服务（单进程托管 API + 静态资源） 
+├── JWT 认证 → SQLite 用户存储 
+├── SSE 流式对话 → LangChain RAG 链 
+│ ├── HyDE 假设文档生成 
+│ ├── Chroma 向量检索（DashScope Embedding） 
+│ ├── BM25 关键词索引（jieba 分词） 
+│ └── BGE-Reranker Cross-Encoder 重排序 
+├── 双层缓存 
+│ ├── MD5 精确匹配缓存（Redis） 
+│ └── 语义相似度缓存（Faiss-like 内存向量） 
+├── 文档异步上传 
+│ ├── RabbitMQ Topic 交换机 
+│ ├── 文件内容 Redis 暂存（600s 过期） 
+│ └── 内嵌 Worker 异步消费 
+└── 对话历史持久化（JSON 文件按用户/会话隔离）
 ```
 
 > 前端为纯 HTML/CSS/JS 单页应用，由 FastAPI 直接托管，无需额外进程。
@@ -25,14 +47,16 @@
 ## ✨ 核心亮点
 
 - **多格式文档解析**：支持 PDF、Word(.docx)、Markdown、TXT 文件自动解析与向量化
-- **智能检索增强**：集成 **HyDE（假设文档嵌入）**、**BGE-Reranker 重排序**、**BM25 关键词检索**，构建三阶混合检索架构
+- **三阶混合检索**：**HyDE（假设文档嵌入）** 语义扩展 → **BM25 关键词召回** → **BGE-Reranker 重排序**，覆盖模糊语义与精确关键词两种场景
+- **异步文档处理**：基于 RabbitMQ 消息队列的异步上传架构，文件内容临时存于 Redis，内嵌 Worker 后台消费，接口即时响应（HTTP 202）
+- **上传任务追踪**：文档上传后通过 task_id 轮询处理状态（Pending → Processing → Completed/Failed）
+- **文档 MD5 去重**：上传时自动检测内容 MD5，避免相同文档重复入库，同时重建 BM25 全量索引
+- **双层热点缓存**：MD5 精确匹配（Redis）+ 语义相似度匹配（内存向量），缓存命中时延迟从 ~20s 降至 ~0.01s
+- **流式 SSE 响应**：服务端推送 + 前端打字机效果，Markdown 实时渲染（表格、代码块、标题、列表）
 - **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯
-- **流式响应**：服务端 SSE 推送，前端逐字打字机效果
-- **多用户认证与隔离**：JWT 认证 + Cookie 持久化登录，用户数据完全物理隔离
-- **Markdown 实时渲染**：流式响应支持表格、代码块、标题、列表等 Markdown 格式实时渲染
-- **会话管理**：可新建、切换、重命名、删除会话，每个会话独立保持上下文
-- **Redis 热点缓存**：缓存高频问题，避免重复推理，响应延迟从 23s 降至 0.01s
-- **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本，对比不同检索策略效果
+- **多用户认证与隔离**：JWT 认证 + HTTP Bearer Token，用户数据完全物理隔离
+- **会话管理**：新建、切换、重命名、删除会话，每个会话独立保持上下文
+- **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本，支持多种检索策略对比
 - **纯 HTML 单页前端**：零依赖浏览器端渲染，由 FastAPI 内置托管，无需前端框架或额外进程
 
 ## 📊 检索策略对比（Top-1 召回率）
@@ -50,38 +74,36 @@
 
 ```
 RAG_Personal/
-├── main.py                         # FastAPI 入口，同时托管前端
+├── main.py                          # 入口：FastAPI + 内嵌 Worker + 托管前端
 ├── app/
-│   ├── api/                        # FastAPI 接口层
-│   │   ├── auth.py                 # 注册/登录
-│   │   ├── chat.py                 # 对话流式、历史、会话管理（含重命名）
-│   │   └── document.py             # 文档上传
-│   ├── static/
-│   │   └── index.html              # HTML 单页前端
-│   ├── services/                   # 业务逻辑层
-│   │   ├── llm.py                  # RAG 链构建
-│   │   ├── hyde.py                 # HyDE 检索增强
-│   │   ├── bm25_service.py         # BM25 关键词索引
-│   │   ├── rerank.py              # BGE-Reranker 重排序
-│   │   ├── vector_store.py         # Chroma 向量库封装
-│   │   ├── history_service.py      # 对话历史持久化
-│   │   ├── chat.py                 # 聊天业务逻辑
-│   │   ├── document.py             # 文档处理逻辑
-│   │   └── KnowledgeBase_md5_service.py  # MD5 去重
-│   ├── schemas/                    # Pydantic 请求/响应模型
-│   ├── config/                     # 配置文件
-│   ├── utils/                      # 工具模块
-│   │   ├── auth.py                 # JWT 令牌、密码加密
-│   │   ├── SQL_database.py         # SQLite 数据库连接
-│   │   ├── redis_client.py         # Redis 客户端
-│   │   └── semantic_cache.py       # 语义缓存
-│   ├── eval_questions.json         # 评测问题集
-│   ├── eval_retrieval.py           # 检索质量评测脚本
-│   ├── redis_retrieval.py          # Redis 压测脚本
-│   └── ui.py                       # Streamlit 前端界面（旧版，已由 HTML 替代）
-├── download_models.py              # 下载 BGE-Reranker 模型
-├── requirements.txt                # Python 依赖
-└── models/                         # （需自行下载）BGE-Reranker 模型
+│   ├── api/                         # 接口层
+│   │   ├── auth.py                  # 注册/登录
+│   │   ├── chat.py                  # SSE 流式对话、会话管理
+│   │   └── document.py              # 文档异步上传
+│   ├── services/                    # 业务层
+│   │   ├── llm.py                   # RAG 链（LCEL）
+│   │   ├── hyde.py                  # HyDE 检索增强
+│   │   ├── bm25_service.py          # BM25 关键词索引
+│   │   ├── rerank.py                # BGE-Reranker 重排序
+│   │   ├── vector_store.py          # Chroma 向量库
+│   │   ├── history_service.py       # 对话历史持久化
+│   │   ├── document.py              # 文件解析 + 校验
+│   │   └── KnowledgeBase_md5_service.py  # MD5 去重 + 入库
+│   ├── schemas/                     # Pydantic 模型
+│   ├── config/settings.py           # 环境配置
+│   ├── utils/                       # 工具模块
+│   │   ├── auth.py                  # JWT + 密码哈希
+│   │   ├── SQL_database.py          # SQLite 连接
+│   │   ├── redis_client.py          # Redis 客户端
+│   │   ├── rabbitmq.py              # RabbitMQ 客户端
+│   │   ├── semantic_cache.py        # 语义缓存
+│   │   └── task_status.py           # 任务追踪
+│   ├── static/index.html            # HTML 前端
+│   ├── eval_retrieval.py            # 检索评测
+│   └── worker.py                    # 独立 Worker（可选）
+├── models/bge-reranker-base/        # Reranker 模型
+├── requirements.txt
+└── .env.example
 ```
 
 ## 🚀 快速开始
@@ -160,72 +182,24 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 | 端口 8000 被占用 | `netstat -ano \| findstr :8000` 查看 PID，`taskkill /F /PID <号>` 释放 |
 | 页面加载不出来 | 确认已执行 `pip install aiofiles`，重启后端 |
 | 重命名会话失败 | 需先发送一条消息创建会话文件，或刷新页面后重试 |
+| RabbitMQ 连接失败 | 检查 vhost 用户权限是否为 `.*`（正则），不能只用 `*` |
+| 文档上传后无响应 | 检查 RabbitMQ 是否运行，Redis 是否可连接（文件内容通过 Redis 传递） |
+| Redis 连接失败 | 缓存功能自动降级，不影响核心问答；启动 Redis 后重启服务即可启用 |
 
 # 更新日志
 
-本文档记录企业知识库智能问答系统的所有重要变更。
-
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
----
+| 版本 | 日期 | 关键变更 |
+|------|------|---------|
+| **1.3.0** | 2026-06-28 | RabbitMQ 异步文档上传 + 任务状态追踪 + 语义相似度缓存 + 独立 Worker 进程；Redis 懒加载降级 |
+| **1.2.0** | 2026-06-27 | HTML 单页前端替代 Streamlit；SSE 流式 + Markdown 渲染；BM25 关键词检索；MD5 去重；会话管理增强 |
+| **1.1.0** | 2026-06-20 | HyDE 假设文档检索 + BGE-Reranker 重排序；JWT 多用户认证；多格式文档解析；LCEL 链式 RAG |
+| **1.0.0** | 2026-06-15 | 项目初始化：FastAPI + LangChain + Chroma + DashScope；文档上传与问答；Recall@K/MRR 评测；Streamlit 原型 |
 
-## [1.2.0] - 2026-06-27
+### 🗺️ 路线图
 
-### 新增
-
-- **HTML 单页前端**：纯 HTML/CSS/JS 实现，由 FastAPI 内置托管，替代 Streamlit 前端，零额外进程
-- **流式 SSE 响应**：支持服务端推送 + 前端打字机效果，Markdown 实时渲染（表格、代码块、标题、列表）
-- **会话管理增强**：支持新建、切换、重命名、删除会话，每个会话独立保持上下文
-- **Redis 热点语义缓存**：缓存高频问题响应，延迟从 12s 降至 0.01s
-- **BM25 关键词检索**：基于文档集构建关键词索引，支持与向量检索混合召回
-- **MD5 文档去重**：上传文档时自动检测重复，避免相同内容重复入库
-
-### 变更
-
-- 前端架构从 Streamlit 迁移至 HTML 单页应用，FastAPI 直接托管静态资源
-- LLM 调用改用原生 `openai` 库 `AsyncOpenAI` 客户端，支持更细粒度的流式控制
-- 对话历史存储从 LangChain 默认方案替换为自研文件持久化方案（JSON 文件按用户/会话隔离）
-
----
-
-## [1.1.0] - 2026-06-20
-
-### 新增
-
-- **HyDE 假设文档嵌入检索**：通过 LLM 生成假设文档进行向量检索，语义模糊场景下召回率提升 20%+
-- **BGE-Reranker 重排序**：对检索结果进行 Cross-Encoder 重排序，进一步提升 Top-K 精准度
-- **多轮对话记忆**：基于 `RunnableWithMessageHistory` 实现会话级上下文保持
-- **JWT 用户认证**：注册/登录体系，Cookie 持久化，用户数据物理隔离
-- **SQLite 用户存储**：用户账户与密码哈希存储
-- **多格式文档解析**：支持 PDF、Word(.docx)、Markdown、TXT 自动解析与分段
-- **Chroma 向量库**：本地持久化向量存储，支持文档增删
-
-### 变更
-
-- 项目从单脚本重构为 FastAPI + 分层架构（API / Services / Schemas / Utils）
-- 引入 LangChain LCEL 链式构建 RAG 流程
-
----
-
-## [1.0.0] - 2026-06-15
-
-### 新增
-
-- 项目初始化，基础 RAG 管线搭建
-- LangChain + Chroma + DashScope Embedding 向量检索
-- FastAPI 后端服务框架
-- 基础文档上传与问答接口
-- 检索质量评估体系：Recall@K、MRR 自动化评测脚本
-- Streamlit 前端原型界面
-
----
-
-## [未发布]
-
-### 计划中
-
-- Docker 一键部署（Dockerfile + docker-compose）
+- Docker 一键部署
 - 会话全文检索与过滤
-- 文档管理增强（列表查看、删除、重向量化）
-- 查询意图分类，按需启用 BM25 混合检索
-- 多租户架构支持
+- 文档管理增强（列表查看、删除）
+- 查询意图分类，按需启用 BM25
