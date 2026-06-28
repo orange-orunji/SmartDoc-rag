@@ -800,6 +800,19 @@ function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+async function pollStatus(taskId) {
+    const res = await fetch(`/api/document/upload/status/${taskId}`);
+    const { data } = await res.json();
+    if (data.status === 'completed') {
+        console.log('上传完成！');
+    } else if (data.status === 'failed') {
+        console.error('上传失败:', data.error);
+    } else {
+        setTimeout(() => pollStatus(taskId), 2000);  // 2秒后重试
+    }
+}
+
+
 // Auto-resize textarea
 document.addEventListener('input', function(e) {
     if (e.target.id === 'chat-input') {

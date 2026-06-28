@@ -39,3 +39,10 @@ class BM25Service:
         # 按分数排序，取 top_k 的下标
         result_rank_list = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
         return [self.documents[i] for i in result_rank_list]
+
+    # 在 BM25Service 中添加方法
+    def add_documents(self, new_docs: list):
+        new_tokens = [list(jieba.cut(doc.page_content)) for doc in new_docs]
+        self.documents.extend(new_docs)
+        self.tokenizes_content.extend(new_tokens)
+        self.bm25 = BM25Okapi(self.tokenizes_content)  # BM25Okapi 本身不支持增量，但数据量小时重建也很快

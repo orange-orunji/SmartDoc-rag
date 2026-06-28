@@ -48,6 +48,13 @@ class settings(BaseSettings):
     REDIS_USER_PREFIX : str = "qa"
     REDIS_EXPIRE : int = 600
 
+    # RabbitMQ 配置
+    RABBITMQ_HOST: str = "192.168.161.128"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str = "rag"
+    RABBITMQ_PASSWORD: str = "123456"
+    RABBITMQ_VHOST: str = "/rag"
+
 @lru_cache
 def get_settings() -> settings:
     return settings()

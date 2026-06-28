@@ -61,3 +61,5 @@ python-docx>=1.0.0
 langchain-core
 requests
 streamlit
+
+aio-pika==9.4.3

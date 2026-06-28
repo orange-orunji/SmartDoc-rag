@@ -38,6 +38,32 @@ async def _extract_text(content: bytes, suffix: str) -> str:
     raise ValueError(f"不支持的文件格式: {suffix}")
 
 
+def validate_upload(content: bytes, filename: str | None) -> UnifiedResponse | None:
+    """纯校验：仅检查文件大小和格式，通过返回 None，不通过返回错误响应"""
+    if not filename:
+        return UnifiedResponse(code=400, message="文件名不能为空")
+
+    settings = get_settings()
+    path = Path(filename)
+    suffix = path.suffix.lower()
+
+    file_size_mb = len(content) / (1024 * 1024)
+    if file_size_mb > settings.MAX_FILE_SIZE:
+        return UnifiedResponse(
+            code=413,
+            message=f"文件大小 {file_size_mb:.2f}MB 超过限制 {settings.MAX_FILE_SIZE}MB",
+            data={"filename": filename}
+        )
+
+    if suffix not in settings.ALLOWED_SUFFIXES:
+        return UnifiedResponse(
+            code=400,
+            message=f"[Error] {filename} 暂时不支持上传，仅支持 {settings.ALLOWED_SUFFIXES}"
+        )
+
+    return None  # 校验通过
+
+
 async def upload_documents(content: bytes, filename: str | None, current_user: dict) -> UnifiedResponse:
     user_id = current_user["user_id"]
     """上传文件处理：校验 -> 解析 -> 向量化存储"""
