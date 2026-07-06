@@ -199,7 +199,23 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 ### 🗺️ 路线图
 
+**近期计划**
+
 - Docker 一键部署
 - 会话全文检索与过滤
 - 文档管理增强（列表查看、删除）
 - 查询意图分类，按需启用 BM25
+
+**🤖 Agent 升级方案（v2.0 目标）**
+
+从被动检索式 RAG 升级为具备自主决策能力的 Agent，最终打造一个能理解指令、调用工具、处理文件的智能办公助手。
+
+| 阶段 | 内容 | 说明 |
+|------|------|------|
+| **1. Agent 架构升级** | RAG 链式调用 → Agent 自主决策 | 引入 LangChain Agent 框架，让模型不再按固定链路执行，而是根据用户意图自主规划与调用工具 |
+| **2. 上下文持久化记忆** | 对话上下文文本存储 + 多轮会话记忆 | 将完整对话上下文持久化，支撑 Agent 在多轮交互中保持连贯推理与状态追踪 |
+| **3. Function Calling 工具封装** | 检索能力封装为 LangChain Tool | 将现有 HyDE 检索、BM25 召回、Rerank 重排序等能力封装成标准 Function Calling 工具，供 Agent 按需调用 |
+| **4. AgentExecutor 串联** | Tools + Memory + LLM 统一调度 | 通过 `AgentExecutor` 将工具集、对话记忆、LLM 推理串联，跑通首个能自主决策的 Agent 工作流 |
+| **5. 智能办公助手** | 文件处理 + 文件发送 | 最终目标：Agent 不仅能检索问答，还能处理用户上传的文件、生成报告并主动发送，成为全功能智能办公助手 |
+
+> 🔗 技术路线：`RAG 检索能力` → `Function Calling Tool 封装` → `AgentExecutor (Tools + Memory + LLM)` → `智能办公助手`
