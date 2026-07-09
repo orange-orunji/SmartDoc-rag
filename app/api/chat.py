@@ -4,7 +4,7 @@ import logging
 import os
 
 from fastapi.responses import StreamingResponse
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.schemas.chat import ChatRequest, RenameRequest
 from app.services.history_service import get_file_chat_history
@@ -30,12 +30,12 @@ def _sse_escape(text: str) -> str:
 """
 @router.post("/stream")
 @limiter.limit("10/minute")
-async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
+async def stream_chat(request: Request, body: ChatRequest, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["user_id"])
 
     if redis:
         # 1. 语义相似度缓存
-        cached_answer = semantic_cache.lookup(request.question, user_id)
+        cached_answer = semantic_cache.lookup(body.question, user_id)
         if cached_answer:
             async def cache_stream():
                 yield f"data: {_sse_escape(cached_answer)}\n\n"
@@ -43,7 +43,7 @@ async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_cur
             return StreamingResponse(cache_stream(), 200, media_type="text/event-stream")
 
         # 2. MD5 精确匹配缓存（兜底）
-        question_hash = hashlib.md5(request.question.encode()).hexdigest()
+        question_hash = hashlib.md5(body.question.encode()).hexdigest()
         user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
         redis_chat_history = redis.get(user_key)
         if redis_chat_history:
@@ -57,8 +57,8 @@ async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_cur
         try:
             chain = get_rag_chain(user_id)
             async for chunk in chain.astream(
-                {"input": request.question},
-                config={"configurable": {"session_id": request.session_id, "user_id": user_id}}
+                {"input": body.question},
+                config={"configurable": {"session_id": body.session_id, "user_id": user_id}}
             ):
                 all_request += chunk
                 yield f"data: {_sse_escape(chunk)}\n\n"
@@ -70,10 +70,10 @@ async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_cur
                 yield f"data: 【系统错误】{_sse_escape(str(e))}\n\n"
         finally:
             if all_request and redis:
-                question_hash = hashlib.md5(request.question.encode()).hexdigest()
+                question_hash = hashlib.md5(body.question.encode()).hexdigest()
                 user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
                 redis.setex(name=user_key, value=all_request, time=s.REDIS_EXPIRE)
-                semantic_cache.store(request.question, user_id, all_request)
+                semantic_cache.store(body.question, user_id, all_request)
             yield "data: [DONE]\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

@@ -84,23 +84,28 @@ async def _handle_document_upload(payload: dict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时：连接 RabbitMQ
-    await rabbitmq.connect()
+    worker_task = None
+    mq_connected = False
 
-    # ★ 启动内嵌 Worker（后台任务，不停消费）
-    worker_task = asyncio.create_task(
-        rabbitmq.consume(
-            queue_name="document.upload.queue",
-            routing_keys=["document.upload"],
-            callback=_handle_document_upload,
-            prefetch_count=2,
-            max_retries=cfg.MQ_MAX_RETRIES,
-            retry_delay=cfg.MQ_RETRY_DELAY_SECONDS,
+    # ── RabbitMQ 连接（可选：开发环境不可用时不阻塞启动）──
+    try:
+        await rabbitmq.connect()
+        mq_connected = True
+        worker_task = asyncio.create_task(
+            rabbitmq.consume(
+                queue_name="document.upload.queue",
+                routing_keys=["document.upload"],
+                callback=_handle_document_upload,
+                prefetch_count=2,
+                max_retries=cfg.MQ_MAX_RETRIES,
+                retry_delay=cfg.MQ_RETRY_DELAY_SECONDS,
+            )
         )
-    )
-    logger.info("内嵌 Worker 已启动，等待任务...")
+        logger.info("RabbitMQ 已连接，内嵌 Worker 已启动")
+    except Exception:
+        logger.warning("RabbitMQ 不可用，文档异步上传功能将禁用")
 
-    # 构建 BM25 索引
+    # ── 构建 BM25 索引 ──
     try:
         all_docs = VectorStoreService().get_all_documents()
     except AttributeError:
@@ -116,13 +121,15 @@ async def lifespan(app: FastAPI):
 
     yield  # ← FastAPI 在此运行
 
-    # 关闭时：取消 Worker 并断开
-    worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
-    await rabbitmq.close()
+    # ── 关闭时：取消 Worker 并断开 ──
+    if worker_task is not None:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
+    if mq_connected:
+        await rabbitmq.close()
 
 
 app = FastAPI(title="RAG Personal API", lifespan=lifespan)
@@ -149,10 +156,10 @@ async def redirect_to_frontend():
 # 静态文件服务（HTML 前端）
 # ── 限流中间件 ──
 if cfg.RATE_LIMIT_ENABLED:
-    from slowapi.middleware import SlowASGIMiddleware
+    from slowapi.middleware import SlowAPIASGIMiddleware
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    app.add_middleware(SlowASGIMiddleware)
+    app.add_middleware(SlowAPIASGIMiddleware)
 
 app.mount("/static", StaticFiles(directory="app/static", html=True), name="static")
 

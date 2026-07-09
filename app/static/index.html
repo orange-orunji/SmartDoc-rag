@@ -458,6 +458,7 @@ async function loadSessions() {
         const resp = await fetch(API_BASE + '/api/chat/sessions', {
             headers: authHeaders()
         });
+        if (resp.status === 401) { logout(); return; }
         if (!resp.ok) throw new Error('Failed to load sessions');
         const data = await resp.json();
         const sessions = data.sessions || [];
@@ -594,6 +595,7 @@ async function loadHistory() {
         const resp = await fetch(API_BASE + '/api/chat/history/' + encodeURIComponent(currentSessionId), {
             headers: authHeaders()
         });
+        if (resp.status === 401) { logout(); return; }
         if (resp.ok) {
             const data = await resp.json();
             messages = data.messages || [];

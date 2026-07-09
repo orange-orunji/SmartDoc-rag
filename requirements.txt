@@ -63,3 +63,5 @@ requests
 streamlit
 
 aio-pika==9.4.3
+
+slowapi
