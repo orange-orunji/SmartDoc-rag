@@ -1,3 +1,5 @@
+import logging
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 import asyncio
@@ -5,7 +7,9 @@ import asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from app.api.chat import router as chat_router
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.api.chat import router as chat_router, limiter
 from app.api.document import router as document_router
 from app.api.auth import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,15 +24,35 @@ from app.utils.rabbitmq import rabbitmq
 from app.utils.redis_client import get_redis
 from app.utils.task_status import TaskTracker, TaskStatus
 from app.services.vector_store import vector_store_service as vs_svc
+from app.config.settings import get_settings
+
+# ── 日志系统初始化 ──
+cfg = get_settings()
+
+logging.basicConfig(
+    level=getattr(logging, cfg.LOG_LEVEL),
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+logger = logging.getLogger("rag")
 
 
 async def _handle_document_upload(payload: dict):
-    """消息队列异步处理文档上传任务（内嵌 Worker）"""
+    """消息队列异步处理文档上传任务（内嵌 Worker，带幂等防护）"""
     task_id = payload["task_id"]
     filename = payload["filename"]
     user_id = payload.get("user_id", "system")
 
+    # ── 幂等性检查 ──
+    idempotent_key = f"task:processed:{task_id}"
     redis = get_redis()
+    if redis and redis.exists(idempotent_key):
+        logger.warning("重复消息已跳过 | task_id=%s", task_id)
+        return
+
     content_hex = redis.get(f"file:content:{task_id}") if redis else None
     if not content_hex:
         TaskTracker.set_status(task_id, TaskStatus.FAILED, {"error": "文件内容已过期或丢失"})
@@ -37,6 +61,7 @@ async def _handle_document_upload(payload: dict):
     redis.delete(f"file:content:{task_id}")
 
     TaskTracker.set_status(task_id, TaskStatus.PROCESSING)
+    logger.info("开始处理文档 | task_id=%s | filename=%s", task_id, filename)
 
     try:
         suffix = Path(filename).suffix.lower()
@@ -48,9 +73,13 @@ async def _handle_document_upload(payload: dict):
         kb_service.upload_by_str(text, filename, user_id=user_id)
         all_docs = vs_svc.get_all_documents()
         BM25Service().build_index(all_docs)
+        if redis:
+            redis.setex(idempotent_key, 86400, "1")
         TaskTracker.set_status(task_id, TaskStatus.COMPLETED, {"filename": filename})
+        logger.info("文档处理完成 | task_id=%s", task_id)
     except Exception as e:
-        TaskTracker.set_status(task_id, TaskStatus.FAILED, {"error": str(e)})
+        logger.exception("文档处理失败 | task_id=%s", task_id)
+        raise  # 让 RabbitMQ 重试机制接管
 
 
 @asynccontextmanager
@@ -65,9 +94,11 @@ async def lifespan(app: FastAPI):
             routing_keys=["document.upload"],
             callback=_handle_document_upload,
             prefetch_count=2,
+            max_retries=cfg.MQ_MAX_RETRIES,
+            retry_delay=cfg.MQ_RETRY_DELAY_SECONDS,
         )
     )
-    print("内嵌 Worker 已启动，等待任务...")
+    logger.info("内嵌 Worker 已启动，等待任务...")
 
     # 构建 BM25 索引
     try:
@@ -81,7 +112,7 @@ async def lifespan(app: FastAPI):
         ]
     BM25Service().build_index(all_docs)
     Base.metadata.create_all(bind=engine)
-    print(f"BM25 索引构建完成，文档数：{len(all_docs)}")
+    logger.info("BM25 索引构建完成，文档数: %d", len(all_docs))
 
     yield  # ← FastAPI 在此运行
 
@@ -98,10 +129,10 @@ app = FastAPI(title="RAG Personal API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cfg.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(chat_router, prefix="/api/chat", tags=["对话接口"])
@@ -116,14 +147,26 @@ async def redirect_to_frontend():
 
 
 # 静态文件服务（HTML 前端）
+# ── 限流中间件 ──
+if cfg.RATE_LIMIT_ENABLED:
+    from slowapi.middleware import SlowASGIMiddleware
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowASGIMiddleware)
+
 app.mount("/static", StaticFiles(directory="app/static", html=True), name="static")
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("未捕获异常 | path=%s method=%s", request.url.path, request.method)
+    if cfg.is_production:
+        message = "服务器内部错误，请联系管理员"
+    else:
+        message = f"服务器内部错误: {str(exc)}"
     return JSONResponse(
         status_code=500,
-        content={"code": 500, "message": f"服务器内部错误: {str(exc)}", "data": None}
+        content={"code": 500, "message": message, "data": None}
     )
 
 

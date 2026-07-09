@@ -1,9 +1,12 @@
 import asyncio
 import json
+import logging
 from typing import Callable, Awaitable
 
 import aio_pika
 from app.config.settings import get_settings
+
+logger = logging.getLogger("rag.rabbitmq")
 
 
 class RabbitMQClient:
@@ -41,6 +44,8 @@ class RabbitMQClient:
         routing_keys: list[str],
         callback: Callable[[dict], Awaitable[None]],
         prefetch_count: int = 1,
+        max_retries: int = 3,
+        retry_delay: int = 5,
     ):
         if not self._channel:
             raise RuntimeError("RabbitMQ 未连接")
@@ -58,7 +63,26 @@ class RabbitMQClient:
             async for msg in iterator:
                 async with msg.process():
                     payload = json.loads(msg.body.decode())
-                    await callback(payload)
+                    task_id = payload.get("task_id", "unknown")
+                    retry_count = 0
+
+                    while True:
+                        try:
+                            await callback(payload)
+                            break  # 成功则退出重试循环
+                        except Exception as e:
+                            retry_count += 1
+                            logger.error(
+                                "消息处理失败 | task_id=%s | 第%d次重试 | error=%s",
+                                task_id, retry_count, str(e)
+                            )
+                            if retry_count >= max_retries:
+                                logger.error(
+                                    "消息重试耗尽，进入死信队列 | task_id=%s | max_retries=%d",
+                                    task_id, max_retries
+                                )
+                                raise  # 超过重试次数，抛异常让消息进入死信队列
+                            await asyncio.sleep(retry_delay)
 
     async def close(self):
         if self._channel:

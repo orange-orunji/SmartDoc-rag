@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: smartdoc-redis
+    ports:
+      - "6380:6379"                    
+    volumes:
+      - redis_data:/data
+    command: redis-server --requirepass Ww2301079399@
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: smartdoc-rabbitmq
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: rag
+      RABBITMQ_DEFAULT_PASS: 123456
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: smartdoc-chroma
+    ports:
+      - "8002:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      IS_PERSISTENT: TRUE
+      PERSIST_DIRECTORY: /chroma/chroma
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smartdoc-worker
+    command: python -m app.worker
+    depends_on:
+      - redis
+      - rabbitmq
+      - chroma
+    environment:
+      ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: rag
+      RABBITMQ_PASSWORD: 123456
+      RABBITMQ_VHOST: /rag
+    volumes:
+      - ./data/uploads:/app/data/uploads
+      - ./data/storage:/app/data/storage
+      - ./data/chat_history:/app/data/chat_history
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smartdoc-api
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8001:8000"
+    depends_on:
+      - redis
+      - rabbitmq
+      - chroma
+      - worker
+    environment:
+      ENV: production
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: rag
+      RABBITMQ_PASSWORD: 123456
+      RABBITMQ_VHOST: /rag
+    volumes:
+      - ./data/uploads:/app/data/uploads
+      - ./data/storage:/app/data/storage
+      - ./data/chat_history:/app/data/chat_history
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  rabbitmq_data:
+  chroma_data:

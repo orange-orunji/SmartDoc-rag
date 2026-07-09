@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 
 from fastapi.responses import StreamingResponse
@@ -12,7 +13,11 @@ from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
 from app.utils.semantic_cache import semantic_cache
 from app.config.settings import get_settings
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
+logger = logging.getLogger("rag.chat")
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
 s = get_settings()
 
@@ -24,6 +29,7 @@ def _sse_escape(text: str) -> str:
 流式输出接口
 """
 @router.post("/stream")
+@limiter.limit("10/minute")
 async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["user_id"])
 
@@ -57,7 +63,11 @@ async def stream_chat(request: ChatRequest, current_user: dict = Depends(get_cur
                 all_request += chunk
                 yield f"data: {_sse_escape(chunk)}\n\n"
         except Exception as e:
-            yield f"data: 【系统错误】{_sse_escape(str(e))}\n\n"
+            logger.exception("流式对话异常 | user_id=%s", user_id)
+            if s.is_production:
+                yield f"data: {_sse_escape('【系统错误】服务暂时不可用，请稍后重试')}\n\n"
+            else:
+                yield f"data: 【系统错误】{_sse_escape(str(e))}\n\n"
         finally:
             if all_request and redis:
                 question_hash = hashlib.md5(request.question.encode()).hexdigest()
