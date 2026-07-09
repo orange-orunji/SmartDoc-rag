@@ -190,8 +190,9 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-| 版本 | 日期 | 关键变更 |
-|------|------|---------|
+| 版本 | 日期         | 关键变更 |
+|------|------------|---------|
+| **1.4.0** | 2026-07-09 | 工程化加固 |
 | **1.3.0** | 2026-06-28 | RabbitMQ 异步文档上传 + 任务状态追踪 + 语义相似度缓存 + 独立 Worker 进程；Redis 懒加载降级 |
 | **1.2.0** | 2026-06-27 | HTML 单页前端替代 Streamlit；SSE 流式 + Markdown 渲染；BM25 关键词检索；MD5 去重；会话管理增强 |
 | **1.1.0** | 2026-06-20 | HyDE 假设文档检索 + BGE-Reranker 重排序；JWT 多用户认证；多格式文档解析；LCEL 链式 RAG |
