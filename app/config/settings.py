@@ -49,7 +49,7 @@ class settings(BaseSettings):
     CHAT_HISTORY_STORAGY_PATH: str = str(BASE_DIR / "app/data/chat_history")
 
     # ── redis 配置 ──
-    REDIS_HOST: str = "192.168.161.128"
+    REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 1
     REDIS_PASSWORD: str = ""  # 无密码时留空即可
