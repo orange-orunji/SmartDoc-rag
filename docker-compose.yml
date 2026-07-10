@@ -8,7 +8,7 @@ services:
       - "6380:6379"                    
     volumes:
       - redis_data:/data
-    command: redis-server --requirepass Ww2301079399@
+    command: redis-server --requirepass <redis_password>
     restart: unless-stopped
 
   rabbitmq:
@@ -19,7 +19,7 @@ services:
       - "15673:15672"
     environment:
       RABBITMQ_DEFAULT_USER: rag
-      RABBITMQ_DEFAULT_PASS: 123456
+      RABBITMQ_DEFAULT_PASS: <rabbitmq_password>
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: rag
-      RABBITMQ_PASSWORD: 123456
+      RABBITMQ_PASSWORD: <rabbitmq_password>
       RABBITMQ_VHOST: /rag
     volumes:
       - ./data/uploads:/app/data/uploads
@@ -81,7 +81,7 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: rag
-      RABBITMQ_PASSWORD: 123456
+      RABBITMQ_PASSWORD: <rabbitmq_password>
       RABBITMQ_VHOST: /rag
     volumes:
       - ./data/uploads:/app/data/uploads
