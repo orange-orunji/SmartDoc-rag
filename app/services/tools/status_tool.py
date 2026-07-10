@@ -1,9 +1,12 @@
 from langchain_core.tools import tool
 
-@tool(description="语义向量检索工具。"
-                  "根据查询语句在知识库中搜索语义相似的文档片段。"
-                  "适用场景：用户问概念性问题、需要理解语义的问题（如'什么是XXX'、'XXX的原理是什么'）。"
-                  "不适用场景：精确关键词匹配（如'XXX函数签名'），此时应使用 keyword_search。"
-)
-def get_document_status() -> str :
+
+@tool
+def get_document_status() -> str:
+    """查询知识库统计信息。
+
+    返回当前知识库中的文档总数、各类型文档数量、最后更新时间等统计信息。
+    适用场景：用户询问"知识库有什么"、"有多少文档"、"最近更新了哪些"等问题时。
+    不适用场景：用户询问具体的文档内容——此时应使用 search_knowledge_base。
+    """
     pass
