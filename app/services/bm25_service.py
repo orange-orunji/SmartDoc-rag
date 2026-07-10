@@ -1,7 +1,7 @@
 import jieba
 from rank_bm25 import BM25Okapi
 """
-bm5得分处理功能
+bm25得分处理功能
 导入模型->查询全部文本->投喂给模型->对问题进行切片查找->返回指定相似的最高的几个
 """
 class BM25Service:

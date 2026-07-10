@@ -1,5 +1,7 @@
 from langchain_core.tools import tool
-from app.services.llm import get_rag_chain
+
+from app.services.hyde import hyde_plus_rerank_bm25_retrieve
+import logging
 
 
 @tool
@@ -12,7 +14,8 @@ def search_knowledge_base(query: str) -> str:
     适用场景：所有知识库问答，包括概念性问题（如"什么是 JVM"）和精确术语查找（如"HashMap 的 put 方法"）。
     不适用场景：闲聊、查询天气等知识库外的内容。
     """
-    # 复用现有的 RAG 链（已包含 HyDE + 向量 + BM25 + Rerank 全流程）
-    chain = get_rag_chain(user_id="agent")
-    result = chain.invoke({"input": query})
-    return result
+    logger = logging.getLogger("rag.tools")
+    logger.info("Agent 调用了 search_knowledge_base | query=%s", query)
+
+    # 复用假想文本生成（已包含 HyDE + 向量 + BM25 + Rerank 全流程）
+    return hyde_plus_rerank_bm25_retrieve(query)
