@@ -6,6 +6,7 @@ import os
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Request
 
+from app.agent.agent import get_agent
 from app.schemas.chat import ChatRequest, RenameRequest
 from app.services.history_service import get_file_chat_history
 from app.services.llm import get_rag_chain
@@ -55,13 +56,18 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
     async def event_stream():
         all_request = ""
         try:
-            chain = get_rag_chain(user_id)
+            # chain = get_rag_chain(user_id)
+            chain = get_agent()
             async for chunk in chain.astream(
                 {"input": body.question},
-                config={"configurable": {"session_id": body.session_id, "user_id": user_id}}
+                # config={"configurable": {"session_id": body.session_id, "user_id": user_id}}
             ):
-                all_request += chunk
-                yield f"data: {_sse_escape(chunk)}\n\n"
+                text = chunk.get("output","")
+                if text is None:
+                    continue
+                all_request += text
+                # yield f"data: {_sse_escape(chunk)}\n\n"
+                yield f"data: {_sse_escape(text)}\n\n"
         except Exception as e:
             logger.exception("流式对话异常 | user_id=%s", user_id)
             if s.is_production:
