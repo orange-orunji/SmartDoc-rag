@@ -5,6 +5,7 @@ import os
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Request
+from langchain_core.messages import HumanMessage, AIMessage
 
 from app.agent.agent import get_agent
 from app.schemas.chat import ChatRequest, RenameRequest
@@ -80,6 +81,9 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                 user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
                 redis.setex(name=user_key, value=all_request, time=s.REDIS_EXPIRE)
                 semantic_cache.store(body.question, user_id, all_request)
+            history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
+            history.add_message(HumanMessage(content=body.question))
+            history.add_message(AIMessage(content=all_request))
             yield "data: [DONE]\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
