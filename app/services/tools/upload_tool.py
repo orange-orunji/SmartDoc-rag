@@ -1,16 +1,14 @@
+import json
+
 from langchain_core.tools import tool
-from pydantic import BaseModel,Field
 
 from app.services.KnowledgeBase_md5_service import KnowledgeBaseService
 from app.services.bm25_service import BM25Service
 from app.services.vector_store import vector_store_service
 
-class UploadInput(BaseModel):
-    filename: str = Field(description="原始文件名")
-    content: str = Field(description="文件内容")
 
-@tool(args_schema=UploadInput)
-def upload_document(rep : UploadInput):
+@tool
+def upload_document(rep_input : str):
     """
     上传文档到企业知识库。
 
@@ -24,8 +22,9 @@ def upload_document(rep : UploadInput):
     - filename: 文档名称（用户指定的文件名，如"简历整理笔记"）
     - content: 文档的完整文本内容（用户要求存储的原文，不要省略或改写）
 
-    :param rep: filename 文档名称  content 文档的完整文本内容
+    :param rep_input: filename 文档名称  content 文档的完整文本内容
     :return:
     """
-    KnowledgeBaseService().upload_by_str(rep.content, rep.filename,user_id="agent")
+    loads = json.loads(rep_input,strict=False)
+    KnowledgeBaseService().upload_by_str(loads["content"], loads["filename"],user_id="agent")
     BM25Service().build_index(vector_store_service.get_all_documents())
