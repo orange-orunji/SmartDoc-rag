@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from langchain_core.messages import HumanMessage, AIMessage
 
 from app.agent.agent import get_agent
+from app.api.auth import current_user_ctx
 from app.schemas.chat import ChatRequest, RenameRequest
 from app.services.history_service import get_file_chat_history
 from app.services.llm import get_rag_chain
@@ -58,17 +59,39 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
         all_request = ""
         try:
             # chain = get_rag_chain(user_id)
+            current_user_ctx.set(user_id)
             chain = get_agent()
             async for chunk in chain.astream(
                 {"input": body.question},
                 # config={"configurable": {"session_id": body.session_id, "user_id": user_id}}
             ):
-                text = chunk.get("output","")
-                if text is None:
-                    continue
-                all_request += text
-                # yield f"data: {_sse_escape(chunk)}\n\n"
-                yield f"data: {_sse_escape(text)}\n\n"
+                """agent前流式输出方案"""
+                # agent 前旧方案
+                # text = chunk.get("output","")
+                # if text is None  or len(text) == 0:
+                #     continue
+                # all_request += text
+                # # yield f"data: {_sse_escape(chunk)}\n\n"
+                # yield f"data: {_sse_escape(text)}\n\n"
+                logger.info("Agent chunk keys: %s", list(chunk.keys()))  # ← 加这行
+                if "actions" in chunk:
+                    for action in chunk["actions"]:
+                        tool_name = action.tool
+                        tool_input = str(action.tool_input)[:80]
+                        hint = f"[调用工具: {tool_name} | 输入: {tool_input}]"
+                        logger.info("Agent action: %s(%s)", tool_name, tool_input)
+                        yield f"data: {_sse_escape(hint)}\n\n"
+                elif "steps" in chunk:
+                    for step in chunk["steps"]:
+                        observation = step.observation
+                        if observation:
+                            logger.info("Tool result length: %d", len(observation))
+                elif "output" in chunk:
+                    text = chunk["output"]
+                    if text is None  or len(text) == 0:
+                        continue
+                    all_request += text
+                    yield f"data: {_sse_escape(text)}\n\n"
         except Exception as e:
             logger.exception("流式对话异常 | user_id=%s", user_id)
             if s.is_production:

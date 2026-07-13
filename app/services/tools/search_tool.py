@@ -6,13 +6,20 @@ import logging
 
 @tool
 def search_knowledge_base(query: str) -> str:
-    """搜索企业知识库，返回最相关的文档内容。
+    """在企业知识库中搜索文档内容。
 
-    内部自动执行 HyDE 语义扩展 → 向量检索 + BM25 关键词检索 → 结果合并 → Rerank 重排序，
-    最终返回精选后的 top-3 文档片段。
+    内部流程：自动完成 HyDE 语义扩展 → 向量检索 + BM25 关键词检索 → 去重 → Rerank 重排序。
+    返回：top-3 最相关文档片段。
 
-    适用场景：所有知识库问答，包括概念性问题（如"什么是 JVM"）和精确术语查找（如"HashMap 的 put 方法"）。
-    不适用场景：闲聊、查询天气等知识库外的内容。
+    ✅ 必须调用的情况：
+    - "XX文档里怎么说的"
+    - "有没有关于XX的资料"
+    - "知识库里XX是什么"
+
+    ❌ 不要调用的情况：
+    - "今天天气怎么样"（知识库没有）
+    - "帮我写一段代码"（这是生成任务，不是检索）
+    - 用户只是闲聊
     """
     logger = logging.getLogger("rag.tools")
     logger.info("Agent 调用了 search_knowledge_base | query=%s", query)

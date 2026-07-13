@@ -22,8 +22,8 @@ class settings(BaseSettings):
 
     # ── API 配置 ──
     SILICON_API_KEY: str
-    SILICON_BASE_URL: str = "https://api.siliconflow.cn/v1"
-    SILICON_MODEL: str = "Qwen/Qwen2.5-7B-Instruct"
+    SILICON_BASE_URL: str = "https://api.deepseek.com"
+    SILICON_MODEL: str = "deepseek-v4-flash"
 
     # ── chroma 配置 ──
     CHROMA_DIR: str = str(BASE_DIR / "app/data/storage/chroma_db")

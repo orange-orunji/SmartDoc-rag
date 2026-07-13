@@ -60,3 +60,6 @@ numpy
 pydantic
 pydantic
 pydantic
+torch
+jieba3k
+contextvars

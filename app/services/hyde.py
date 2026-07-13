@@ -12,6 +12,7 @@ service = BM25Service()
 
 llm = ChatOpenAI(
     model=s.SILICON_MODEL,
+    api_key=s.SILICON_API_KEY,
     base_url=s.SILICON_BASE_URL,
     streaming=True,
     callbacks=[]
