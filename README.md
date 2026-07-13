@@ -27,11 +27,16 @@
 浏览器（HTML 单页前端） 
 │ ▼ FastAPI 服务（单进程托管 API + 静态资源） 
 ├── JWT 认证 → SQLite 用户存储 
-├── SSE 流式对话 → LangChain RAG 链 
-│ ├── HyDE 假设文档生成 
-│ ├── Chroma 向量检索（DashScope Embedding） 
-│ ├── BM25 关键词索引（jieba 分词） 
-│ └── BGE-Reranker Cross-Encoder 重排序 
+├── SSE 流式对话
+│   ├── 🤖 Agent 智能体（主路径）─ create_tool_calling_agent + AgentExecutor
+│   │   ├── search_knowledge_base ─ HyDE + 向量 + BM25 + Rerank 全流程检索
+│   │   ├── upload_document ─ 文档内容直接入库
+│   │   └── get_document_status ─ 知识库统计查询
+│   └── RAG 链（备选路径）─ LCEL + RunnableWithMessageHistory
+│       ├── HyDE 假设文档生成 
+│       ├── Chroma 向量检索（DashScope Embedding） 
+│       ├── BM25 关键词索引（jieba 分词） 
+│       └── BGE-Reranker Cross-Encoder 重排序 
 ├── 双层缓存 
 │ ├── MD5 精确匹配缓存（Redis） 
 │ └── 语义相似度缓存（Faiss-like 内存向量） 
@@ -47,6 +52,7 @@
 ## ✨ 核心亮点
 
 - **多格式文档解析**：支持 PDF、Word(.docx)、Markdown、TXT 文件自动解析与向量化
+- **Agent 自主决策**：基于 Function Calling 的智能体架构，自动选择检索/上传/统计工具，三阶混合检索按需调用
 - **三阶混合检索**：**HyDE（假设文档嵌入）** 语义扩展 → **BM25 关键词召回** → **BGE-Reranker 重排序**，覆盖模糊语义与精确关键词两种场景
 - **异步文档处理**：基于 RabbitMQ 消息队列的异步上传架构，文件内容临时存于 Redis，内嵌 Worker 后台消费，接口即时响应（HTTP 202）
 - **上传任务追踪**：文档上传后通过 task_id 轮询处理状态（Pending → Processing → Completed/Failed）
@@ -80,7 +86,13 @@ RAG_Personal/
 │   │   ├── auth.py                  # 注册/登录
 │   │   ├── chat.py                  # SSE 流式对话、会话管理
 │   │   └── document.py              # 文档异步上传
+│   ├── agent/                       # Agent 智能体
+│   │   └── agent.py                 # Agent 定义 + 工具注册 + Prompt
 │   ├── services/                    # 业务层
+│   │   ├── tools/                   # Agent 工具集
+│   │   │   ├── search_tool.py       # 知识库检索工具
+│   │   │   ├── upload_tool.py       # 文档上传工具
+│   │   │   └── status_tool.py       # 知识库统计工具
 │   │   ├── llm.py                   # RAG 链（LCEL）
 │   │   ├── hyde.py                  # HyDE 检索增强
 │   │   ├── bm25_service.py          # BM25 关键词索引
@@ -145,8 +157,8 @@ cp .env.example .env
 ```ini
 SILICON_API_KEY=你的API_KEY
 DASHSCOPE_API_KEY=你的API_KEY
-SILICON_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-SILICON_MODEL=qwen-flash
+SILICON_BASE_URL=https://api.deepseek.com
+SILICON_MODEL=deepseek-chat
 ```
 
 ### 4. 启动 Redis（使用缓存功能时需要）
@@ -192,6 +204,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.5.0** | 2026-07-13 | Agent 升级：Function Calling 工具封装（search/upload/status）+ AgentExecutor 串联 + DeepSeek 模型切换 |
 | **1.4.0** | 2026-07-09 | 工程化加固 |
 | **1.3.0** | 2026-06-28 | RabbitMQ 异步文档上传 + 任务状态追踪 + 语义相似度缓存 + 独立 Worker 进程；Redis 懒加载降级 |
 | **1.2.0** | 2026-06-27 | HTML 单页前端替代 Streamlit；SSE 流式 + Markdown 渲染；BM25 关键词检索；MD5 去重；会话管理增强 |
@@ -213,10 +226,10 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 | 阶段 | 内容 | 说明 |
 |------|------|------|
-| **1. Agent 架构升级** | RAG 链式调用 → Agent 自主决策 | 引入 LangChain Agent 框架，让模型不再按固定链路执行，而是根据用户意图自主规划与调用工具 |
+| **1. Agent 架构升级** | ✅ 已完成 | RAG 链式调用 → Agent 自主决策 |
 | **2. 上下文持久化记忆** | 对话上下文文本存储 + 多轮会话记忆 | 将完整对话上下文持久化，支撑 Agent 在多轮交互中保持连贯推理与状态追踪 |
-| **3. Function Calling 工具封装** | 检索能力封装为 LangChain Tool | 将现有 HyDE 检索、BM25 召回、Rerank 重排序等能力封装成标准 Function Calling 工具，供 Agent 按需调用 |
-| **4. AgentExecutor 串联** | Tools + Memory + LLM 统一调度 | 通过 `AgentExecutor` 将工具集、对话记忆、LLM 推理串联，跑通首个能自主决策的 Agent 工作流 |
+| **3. Function Calling 工具封装** | ✅ 已完成 | 将现有 HyDE 检索、BM25 召回、Rerank 重排序等能力封装成标准 Function Calling 工具 |
+| **4. AgentExecutor 串联** | ✅ 已完成 | 通过 `AgentExecutor` 将工具集、LLM 推理串联，跑通首个能自主决策的 Agent 工作流 |
 | **5. 智能办公助手** | 文件处理 + 文件发送 | 最终目标：Agent 不仅能检索问答，还能处理用户上传的文件、生成报告并主动发送，成为全功能智能办公助手 |
 
 > 🔗 技术路线：`RAG 检索能力` → `Function Calling Tool 封装` → `AgentExecutor (Tools + Memory + LLM)` → `智能办公助手`
