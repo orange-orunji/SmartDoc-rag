@@ -7,10 +7,14 @@ from app.schemas.user import User
 from app.utils.auth import generate_hash_password, verify_password, create_access_token
 from pydantic import BaseModel
 
+import contextvars
+
 logger = logging.getLogger("rag.auth")
 router = APIRouter()
 
-
+current_user_ctx : contextvars.ContextVar[str] = contextvars.ContextVar(
+    "current_user",default="agent"
+)
 
 # 请求体格式：{"username": "xxx", "password": "xxx"}
 class AutoRequest(BaseModel):

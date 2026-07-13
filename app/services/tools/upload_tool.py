@@ -2,6 +2,7 @@ import json
 
 from langchain_core.tools import tool
 
+from app.api.auth import current_user_ctx
 from app.services.KnowledgeBase_md5_service import KnowledgeBaseService
 from app.services.bm25_service import BM25Service
 from app.services.vector_store import vector_store_service
@@ -26,5 +27,6 @@ def upload_document(rep_input : str):
     :return:
     """
     loads = json.loads(rep_input,strict=False)
-    KnowledgeBaseService().upload_by_str(loads["content"], loads["filename"],user_id="agent")
+    user_id = current_user_ctx.get()
+    KnowledgeBaseService().upload_by_str(loads["content"], loads["filename"],user_id=user_id)
     BM25Service().build_index(vector_store_service.get_all_documents())
