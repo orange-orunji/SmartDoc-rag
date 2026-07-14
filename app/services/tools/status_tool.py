@@ -46,3 +46,23 @@ def get_document_status(keyword: str = "") -> str:
 
     return "\n".join(lines)
 
+@tool
+def generate_report() :
+    """TODO"""
+    pass
+
+@tool
+def send_email() :
+    """TODO"""
+    pass
+
+
+@tool
+def convert_format() :
+    """TODO"""
+    pass
+
+@tool
+def schedule_task() :
+    """TODO"""
+    pass
