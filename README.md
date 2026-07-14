@@ -204,7 +204,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
-| **1.5.0** | 2026-07-13 | Agent 升级：Function Calling 工具封装（search/upload/status）+ AgentExecutor 串联 + DeepSeek 模型切换 |
+| **1.5.0** | 2026-07-14 | Agent 升级：Function Calling 工具封装 + AgentExecutor 串联 + 多轮会话记忆 + DeepSeek 模型切换 |
 | **1.4.0** | 2026-07-09 | 工程化加固 |
 | **1.3.0** | 2026-06-28 | RabbitMQ 异步文档上传 + 任务状态追踪 + 语义相似度缓存 + 独立 Worker 进程；Redis 懒加载降级 |
 | **1.2.0** | 2026-06-27 | HTML 单页前端替代 Streamlit；SSE 流式 + Markdown 渲染；BM25 关键词检索；MD5 去重；会话管理增强 |
@@ -227,7 +227,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 | 阶段 | 内容 | 说明 |
 |------|------|------|
 | **1. Agent 架构升级** | ✅ 已完成 | RAG 链式调用 → Agent 自主决策 |
-| **2. 上下文持久化记忆** | 对话上下文文本存储 + 多轮会话记忆 | 将完整对话上下文持久化，支撑 Agent 在多轮交互中保持连贯推理与状态追踪 |
+| **2. 上下文持久化记忆** | ✅ 已完成 | 多轮会话记忆 |
 | **3. Function Calling 工具封装** | ✅ 已完成 | 将现有 HyDE 检索、BM25 召回、Rerank 重排序等能力封装成标准 Function Calling 工具 |
 | **4. AgentExecutor 串联** | ✅ 已完成 | 通过 `AgentExecutor` 将工具集、LLM 推理串联，跑通首个能自主决策的 Agent 工作流 |
 | **5. 智能办公助手** | 文件处理 + 文件发送 | 最终目标：Agent 不仅能检索问答，还能处理用户上传的文件、生成报告并主动发送，成为全功能智能办公助手 |

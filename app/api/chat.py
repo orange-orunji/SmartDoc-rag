@@ -57,12 +57,22 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
 
     async def event_stream():
         all_request = ""
+        chat_history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
         try:
             # chain = get_rag_chain(user_id)
             current_user_ctx.set(user_id)
             chain = get_agent()
+            # 格式化历史消息为结构化文本
+            history_text = ""
+            if chat_history.messages:
+                lines = ["## 对话历史"]
+                for m in chat_history.messages[-10:]:
+                    role = "用户" if m.type == "human" else "助手"
+                    lines.append(f"- {role}: {m.content}")
+                history_text = "\n".join(lines) + "\n\n## 当前问题\n"
+
             async for chunk in chain.astream(
-                {"input": body.question},
+                {"input": history_text + body.question},
                 # config={"configurable": {"session_id": body.session_id, "user_id": user_id}}
             ):
                 """agent前流式输出方案"""
@@ -73,7 +83,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                 # all_request += text
                 # # yield f"data: {_sse_escape(chunk)}\n\n"
                 # yield f"data: {_sse_escape(text)}\n\n"
-                logger.info("Agent chunk keys: %s", list(chunk.keys()))  # ← 加这行
+                logger.info("Agent chunk keys: %s", list(chunk.keys()))
                 if "actions" in chunk:
                     for action in chunk["actions"]:
                         tool_name = action.tool
@@ -104,7 +114,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                 user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
                 redis.setex(name=user_key, value=all_request, time=s.REDIS_EXPIRE)
                 semantic_cache.store(body.question, user_id, all_request)
-            history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
+            history = chat_history
             history.add_message(HumanMessage(content=body.question))
             history.add_message(AIMessage(content=all_request))
             yield "data: [DONE]\n\n"
