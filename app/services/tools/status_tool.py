@@ -1,6 +1,10 @@
+import time
+
 from langchain_core.tools import tool
 
+from app.services.hyde import llm, hyde_plus_rerank_bm25_retrieve
 from app.services.vector_store import vector_store_service as vss
+from app.config.settings import get_settings
 
 
 @tool
@@ -47,9 +51,36 @@ def get_document_status(keyword: str = "") -> str:
     return "\n".join(lines)
 
 @tool
-def generate_report() :
-    """TODO"""
-    pass
+def generate_report(topic : str = "", format : str = "md") :
+    """查询知识库生成报告
+
+    返回当前知识库中和 当前行为相符的总结文档操作
+
+    参数：
+    - topic: 报告主题关键词
+    - format: 输出格式，"md" 或 "pdf"
+    - 传 "java" → 只显示文件名包含 java 的文档
+    - 不传或传 "" → 显示全部文档
+
+    适用场景：用户询问"帮我总结一份关于XXX知识的文档"、"总结一份假期（其他事务）相关的PDF/md文档"等问题时。
+    不适用场景：用户询问具体的文档内容——此时应使用 search_knowledge_base。
+
+    :return:
+    """
+    # 1. 检索
+    basa_context = hyde_plus_rerank_bm25_retrieve(topic)
+
+    # 2.LLM 汇总
+    content  = "\n".join(doc.page_content for doc in basa_context)
+    result = llm.invoke(input="请帮我根据以下资料进行总结：" + content)
+
+    s = get_settings()
+    # 3.保存文件
+    filename = f"{topic}_{int(time.time())}.{format}"
+    filepath  = f"{s.REPORT_FILE_PATH}/{filename}"
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(result.content)
+    return f"[REPORT_FILE]{filename}\n报告已生成，可点击下载：/reports/{filename}"
 
 @tool
 def send_email() :

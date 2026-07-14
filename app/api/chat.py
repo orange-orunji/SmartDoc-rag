@@ -95,6 +95,12 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                     for step in chunk["steps"]:
                         observation = step.observation
                         if observation:
+                            # 检测报告生成 → 推送下载链接（直接推 HTML，marked 会原样渲染）
+                            if "[REPORT_FILE]" in observation:
+                                filename = observation.split("[REPORT_FILE]")[1].split("\n")[0]
+                                dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
+                                all_request += dl_html  # 持久化到历史
+                                yield f"data: {dl_html}\n\n"
                             logger.info("Tool result length: %d", len(observation))
                 elif "output" in chunk:
                     text = chunk["output"]

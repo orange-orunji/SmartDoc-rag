@@ -3,16 +3,17 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from functools import lru_cache
 
-from app.services.tools.upload_tool import upload_document
-from app.services.tools.status_tool import get_document_status
-from app.services.tools.search_tool import search_knowledge_base
 from app.config.settings import get_settings
+from app.services.tools.upload_tool import upload_document
+from app.services.tools.status_tool import get_document_status,generate_report
+from app.services.tools.search_tool import search_knowledge_base
 
 s = get_settings()
 _tools = [
          upload_document,
          get_document_status,
-         search_knowledge_base
+         search_knowledge_base,
+         generate_report,
      ]
 _llm = ChatOpenAI(
             model=s.SILICON_MODEL,
@@ -36,6 +37,7 @@ _prompt = ChatPromptTemplate.from_messages([
     ## 其他工具
     - 用户说"上传"、"帮我存"、"加进知识库" → 调用 upload_document
     - 用户问"知识库有什么"、"有多少文档" → 调用 get_document_status
+    - 用户要求生成报告时调用 generate_report
     
     ## 回答要求
     - 检索到相关内容时：优先引用文档内容，标注"根据知识库文档："

@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,7 +25,7 @@ from app.utils.rabbitmq import rabbitmq
 from app.utils.redis_client import get_redis
 from app.utils.task_status import TaskTracker, TaskStatus
 from app.services.vector_store import vector_store_service as vs_svc
-from app.config.settings import get_settings
+from app.config.settings import get_settings, BASE_DIR
 
 # ── 日志系统初始化 ──
 cfg = get_settings()
@@ -161,7 +162,13 @@ if cfg.RATE_LIMIT_ENABLED:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIASGIMiddleware)
 
+# ———— 挂载静态路由 —————
 app.mount("/static", StaticFiles(directory="app/static", html=True), name="static")
+
+# 确保报告目录存在后再挂载
+REPORT_DIR = BASE_DIR / "app/data/report"
+os.makedirs(REPORT_DIR, exist_ok=True)
+app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
 
 
 @app.exception_handler(Exception)

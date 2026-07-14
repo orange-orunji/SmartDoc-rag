@@ -212,6 +212,14 @@
         .message .msg-bubble h3 { font-size: 15px; }
         .message .msg-bubble hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
         .message .msg-bubble a { color: var(--primary); text-decoration: underline; }
+        .download-link {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; margin: 8px 0;
+            background: var(--primary); color: #fff !important;
+            border-radius: 8px; text-decoration: none !important;
+            font-size: 13px; font-weight: 500; transition: background 0.15s;
+        }
+        .download-link:hover { background: var(--primary-hover); }
         .message .msg-bubble strong { font-weight: 600; }
         .message.user .msg-bubble code { background: rgba(255,255,255,0.2); }
         .message.user .msg-bubble pre { background: rgba(255,255,255,0.1); }
@@ -709,7 +717,6 @@ async function sendMessage() {
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
-            // Keep the last potentially incomplete line
             buffer = lines.pop() || '';
 
             for (const line of lines) {

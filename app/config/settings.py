@@ -77,6 +77,8 @@ class settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_CHAT_PER_MINUTE: str = "10/minute"
 
+    # —— 下载路径 ——
+    REPORT_FILE_PATH : str  = str(BASE_DIR / "app/data/report")
     @property
     def is_production(self) -> bool:
         return self.ENV == "production"
