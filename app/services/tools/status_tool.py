@@ -89,9 +89,60 @@ def send_email() :
 
 
 @tool
-def convert_format() :
-    """TODO"""
-    pass
+def convert_format(filename : str = "", target_format : str = "") :
+    """转换报告文件格式。
+
+    参数：
+    - filename: 源文件名（如 Redis_1784021277.md）
+    - target_format: 目标格式（"docx"/"md"/"txt"）
+
+    适用场景：用户说"把这个转成 Word"、"导出为 txt"等。
+    """
+
+    # 1. 从 app/data/report/ 读取源文件
+    s = get_settings()
+    with open(f"{s.REPORT_FILE_PATH}/{filename}", "r", encoding="utf-8") as f:
+        content = f.read()
+
+    filename = filename.split("_",1)[0]
+    out_filename = f"{filename}.{target_format}"
+    out_path = f"{s.REPORT_FILE_PATH}/{out_filename}"
+  # 2. 根据格式转换
+    import re
+
+    def _strip_markdown(text: str) -> str:
+        """清洗 Markdown 语法，转为纯文本"""
+        t = text
+        t = re.sub(r'^#{1,6}\s*', '', t)
+        t = re.sub(r'\*\*(.+?)\*\*', r'\1', t)
+        t = re.sub(r'\*(.+?)\*', r'\1', t)
+        t = re.sub(r'`(.+?)`', r'\1', t)
+        t = re.sub(r'^\s*[-*+]\s', '', t)
+        t = re.sub(r'^\s*\d+\.\s', '', t)
+        if t.strip().startswith('|'):
+            t = '  '.join(c.strip() for c in t.split('|') if c.strip())
+        return t
+
+    if target_format == "docx":
+        from docx import Document
+        doc = Document()
+        for line in content.split("\n"):
+            cleaned = _strip_markdown(line)
+            if cleaned.strip():
+                doc.add_paragraph(cleaned)
+        doc.save(out_path)
+    elif target_format == "txt":
+        # txt 也清洗 Markdown → 真正纯文本
+        cleaned_lines = [_strip_markdown(l) for l in content.split("\n") if _strip_markdown(l).strip()]
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(cleaned_lines))
+    elif target_format == "md":
+        # md 保持原样
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+  # 3. 返回 [REPORT_FILE] 标记 → chat.py 自动推送下载按钮
+    return f"[REPORT_FILE]{out_filename}\n报告已生成，可点击下载：/reports/{out_filename}"
 
 @tool
 def schedule_task() :
