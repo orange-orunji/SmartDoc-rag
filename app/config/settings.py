@@ -79,6 +79,13 @@ class settings(BaseSettings):
 
     # —— 下载路径 ——
     REPORT_FILE_PATH : str  = str(BASE_DIR / "app/data/report")
+
+    # —— 邮箱路径 ——
+    SMTP_HOST: str         # QQ邮箱 / 企业邮箱
+    SMTP_PORT: int = 587
+    SMTP_USER: str
+    SMTP_PASSWORD: str     # QQ邮箱用授权码，不是登录密码
+
     @property
     def is_production(self) -> bool:
         return self.ENV == "production"

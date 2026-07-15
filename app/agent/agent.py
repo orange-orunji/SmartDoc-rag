@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from app.config.settings import get_settings
 from app.services.tools.upload_tool import upload_document
-from app.services.tools.status_tool import get_document_status,generate_report,convert_format
+from app.services.tools.status_tool import get_document_status,generate_report,convert_format,send_email
 from app.services.tools.search_tool import search_knowledge_base
 
 s = get_settings()
@@ -15,6 +15,7 @@ _tools = [
          search_knowledge_base,
          generate_report,
          convert_format,
+         send_email,
      ]
 _llm = ChatOpenAI(
             model=s.SILICON_MODEL,
@@ -40,6 +41,7 @@ _prompt = ChatPromptTemplate.from_messages([
     - 用户问"知识库有什么"、"有多少文档" → 调用 get_document_status
     - 用户要求生成报告时调用 -> generate_report
     - 用户要求转换文件格式调用 -> convert_format
+    - 用户要求将文件/消息进行邮件发送调用 -> send_email
     
     ## 回答要求
     - 检索到相关内容时：优先引用文档内容，标注"根据知识库文档："

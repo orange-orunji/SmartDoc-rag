@@ -63,3 +63,4 @@ pydantic
 torch
 jieba3k
 contextvars
+django

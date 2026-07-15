@@ -83,9 +83,52 @@ def generate_report(topic : str = "", format : str = "md") :
     return f"[REPORT_FILE]{filename}\n报告已生成，可点击下载：/reports/{filename}"
 
 @tool
-def send_email() :
-    """TODO"""
-    pass
+def send_email(to : str = "", subject : str = "", body : str = "", attachment : str = "") :
+    """
+
+    参数：
+    - to: 收件人邮箱
+    - subject: 邮件主题
+    - body: 邮件正文
+    - attachment: 附件文件名（可选），如 "Java_1784020972.md"
+
+    适用场景：用户说"发邮件"、"发送给XX"、"把报告发过去"
+    不适用场景：用户询问具体的文档内容——此时应使用 search_knowledge_base。
+    :return:
+    """
+    s = get_settings()
+    #     流程：
+    #       1. 用 smtplib 连接 SMTP 服务器
+    import smtplib
+    smtp_obj = smtplib.SMTP(s.SMTP_HOST, s.SMTP_PORT)
+    smtp_obj.starttls()
+    smtp_obj.login(s.SMTP_USER, s.SMTP_PASSWORD)
+
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    #       2. 构建 MIMEMultipart 邮件（支持正文 + 附件）
+    msg = MIMEMultipart()
+    msg["From"] = s.SMTP_USER
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    from email import encoders
+    from email.mime.base import MIMEBase
+    #       3. 如果有附件，从 report 目录读取并附加
+    if attachment:
+        file_path = f"{s.REPORT_FILE_PATH}/{attachment}"
+        with open(file_path, "rb") as f:
+            part = MIMEBase("application", "octet-stream")  # 通用二进制类型
+            part.set_payload(f.read())                      # 读入原始字节
+            encoders.encode_base64(part)                    # 转 Base64
+            part.add_header("Content-Disposition", f"attachment; filename={attachment}")
+            msg.attach(part)                                # 附加附件
+
+    #       4. 发送邮件
+    smtp_obj.sendmail(s.SMTP_USER, to, msg.as_string())
+    smtp_obj.quit()
+    return f"邮件已发送至 {to}，主题：{subject}"
 
 
 @tool
