@@ -11,7 +11,6 @@ from app.agent.agent import get_agent
 from app.api.auth import current_user_ctx
 from app.schemas.chat import ChatRequest, RenameRequest
 from app.services.history_service import get_file_chat_history
-from app.services.llm import get_rag_chain
 from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
 from app.utils.semantic_cache import semantic_cache
@@ -73,23 +72,12 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
 
             async for chunk in chain.astream(
                 {"input": history_text + body.question},
-                # config={"configurable": {"session_id": body.session_id, "user_id": user_id}}
             ):
-                """agent前流式输出方案"""
-                # agent 前旧方案
-                # text = chunk.get("output","")
-                # if text is None  or len(text) == 0:
-                #     continue
-                # all_request += text
-                # # yield f"data: {_sse_escape(chunk)}\n\n"
-                # yield f"data: {_sse_escape(text)}\n\n"
-                logger.info("Agent chunk keys: %s", list(chunk.keys()))
                 if "actions" in chunk:
                     for action in chunk["actions"]:
                         tool_name = action.tool
                         tool_input = str(action.tool_input)[:80]
                         hint = f"[调用工具: {tool_name} | 输入: {tool_input}]"
-                        logger.info("Agent action: %s(%s)", tool_name, tool_input)
                         yield f"data: {_sse_escape(hint)}\n\n"
                 elif "steps" in chunk:
                     for step in chunk["steps"]:

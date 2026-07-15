@@ -1,6 +1,6 @@
-# 企业知识库智能问答系统
+# 智能办公助手
 
-基于 FastAPI + LangChain + Chroma + RabbitMQ + Redis 构建的企业级 RAG 知识库系统，支持多格式文档异步上传、三阶混合检索、多层热点缓存、多用户认证与对话管理，并内置自动化检索质量评估体系。
+基于 FastAPI + LangChain + Chroma + RabbitMQ + Redis 构建的企业级 AI 办公助手。具备知识库问答、报告生成、文件转换、邮件发送等能力——用自然语言驱动，完成从检索到交付的完整办公闭环。
 
 ---
 
@@ -31,7 +31,10 @@
 │   ├── 🤖 Agent 智能体（主路径）─ create_tool_calling_agent + AgentExecutor
 │   │   ├── search_knowledge_base ─ HyDE + 向量 + BM25 + Rerank 全流程检索
 │   │   ├── upload_document ─ 文档内容直接入库
-│   │   └── get_document_status ─ 知识库统计查询
+│   │   ├── get_document_status ─ 知识库统计 + 关键词过滤
+│   │   ├── generate_report ─ 检索 + LLM 汇总 → Markdown 报告
+│   │   ├── convert_format ─ 报告格式转换（md/txt/docx）
+│   │   └── send_email ─ SMTP 邮件发送 + 附件支持
 │   └── RAG 链（备选路径）─ LCEL + RunnableWithMessageHistory
 │       ├── HyDE 假设文档生成 
 │       ├── Chroma 向量检索（DashScope Embedding） 
@@ -52,7 +55,10 @@
 ## ✨ 核心亮点
 
 - **多格式文档解析**：支持 PDF、Word(.docx)、Markdown、TXT 文件自动解析与向量化
-- **Agent 自主决策**：基于 Function Calling 的智能体架构，自动选择检索/上传/统计工具，三阶混合检索按需调用
+- **Agent 自主决策**：6 个 Function Calling 工具，自动选择检索/上传/统计/报告生成/格式转换/邮件发送
+- **报告生成 + 下载**：Agent 检索知识库 → LLM 汇总 → 保存 Markdown → SSE 推送下载按钮
+- **文件格式转换**：支持 md → docx / txt / md 互转，Markdown 语法自动清洗
+- **邮件发送**：SMTP 协议发送，支持正文 + 附件（QQ 邮箱 / 企业邮箱）
 - **三阶混合检索**：**HyDE（假设文档嵌入）** 语义扩展 → **BM25 关键词召回** → **BGE-Reranker 重排序**，覆盖模糊语义与精确关键词两种场景
 - **异步文档处理**：基于 RabbitMQ 消息队列的异步上传架构，文件内容临时存于 Redis，内嵌 Worker 后台消费，接口即时响应（HTTP 202）
 - **上传任务追踪**：文档上传后通过 task_id 轮询处理状态（Pending → Processing → Completed/Failed）
@@ -90,9 +96,9 @@ RAG_Personal/
 │   │   └── agent.py                 # Agent 定义 + 工具注册 + Prompt
 │   ├── services/                    # 业务层
 │   │   ├── tools/                   # Agent 工具集
+│   │   │   ├── status_tool.py       # 知识库统计 + 报告生成 + 格式转换 + 邮件发送
 │   │   │   ├── search_tool.py       # 知识库检索工具
-│   │   │   ├── upload_tool.py       # 文档上传工具
-│   │   │   └── status_tool.py       # 知识库统计工具
+│   │   │   └── upload_tool.py       # 文档上传工具
 │   │   ├── llm.py                   # RAG 链（LCEL）
 │   │   ├── hyde.py                  # HyDE 检索增强
 │   │   ├── bm25_service.py          # BM25 关键词索引
@@ -110,6 +116,10 @@ RAG_Personal/
 │   │   ├── rabbitmq.py              # RabbitMQ 客户端
 │   │   ├── semantic_cache.py        # 语义缓存
 │   │   └── task_status.py           # 任务追踪
+│   ├── data/                         # 持久化数据
+│   │   ├── storage/                  # ChromaDB + MD5 记录
+│   │   ├── chat_history/             # 对话历史文件
+│   │   └── report/                   # 生成的报告文件
 │   ├── static/index.html            # HTML 前端
 │   ├── eval_retrieval.py            # 检索评测
 │   └── worker.py                    # 独立 Worker（可选）
@@ -204,6 +214,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.6.0** | 2026-07-15 | 智能办公助手：报告生成 + 格式转换 + 邮件发送 + 附件支持 |
 | **1.5.0** | 2026-07-14 | Agent 升级：Function Calling 工具封装 + AgentExecutor 串联 + 多轮会话记忆 + DeepSeek 模型切换 |
 | **1.4.0** | 2026-07-09 | 工程化加固 |
 | **1.3.0** | 2026-06-28 | RabbitMQ 异步文档上传 + 任务状态追踪 + 语义相似度缓存 + 独立 Worker 进程；Redis 懒加载降级 |
@@ -230,6 +241,6 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 | **2. 上下文持久化记忆** | ✅ 已完成 | 多轮会话记忆 |
 | **3. Function Calling 工具封装** | ✅ 已完成 | 将现有 HyDE 检索、BM25 召回、Rerank 重排序等能力封装成标准 Function Calling 工具 |
 | **4. AgentExecutor 串联** | ✅ 已完成 | 通过 `AgentExecutor` 将工具集、LLM 推理串联，跑通首个能自主决策的 Agent 工作流 |
-| **5. 智能办公助手** | 文件处理 + 文件发送 | 最终目标：Agent 不仅能检索问答，还能处理用户上传的文件、生成报告并主动发送，成为全功能智能办公助手 |
+| **5. 智能办公助手** | ✅ 已完成 | 报告生成 + 格式转换 + 邮件发送 + 附件支持 |
 
-> 🔗 技术路线：`RAG 检索能力` → `Function Calling Tool 封装` → `AgentExecutor (Tools + Memory + LLM)` → `智能办公助手`
+> 🔗 技术路线：`RAG 检索能力` → `Function Calling Tool 封装` → `AgentExecutor (Tools + Memory + LLM)` → `智能办公助手` ✅ 已达成
