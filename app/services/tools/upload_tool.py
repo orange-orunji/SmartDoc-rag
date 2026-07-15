@@ -23,10 +23,18 @@ def upload_document(rep_input : str):
     - filename: 文档名称（用户指定的文件名，如"简历整理笔记"）
     - content: 文档的完整文本内容（用户要求存储的原文，不要省略或改写）
 
-    :param rep_input: filename 文档名称  content 文档的完整文本内容
-    :return:
     """
-    loads = json.loads(rep_input,strict=False)
+    # 兼容两种传参方式：JSON 和纯文本（filename\ncontent）
+    try:
+        loads = json.loads(rep_input, strict=False)
+        filename = loads["filename"]
+        content = loads["content"]
+    except (json.JSONDecodeError, KeyError):
+        # LLM 直接传了 "文件名.md\n\n内容..." 的纯文本
+        parts = rep_input.split("\n", 1)
+        filename = parts[0].strip()
+        content = parts[1].strip() if len(parts) > 1 else rep_input
+
     user_id = current_user_ctx.get()
-    KnowledgeBaseService().upload_by_str(loads["content"], loads["filename"],user_id=user_id)
+    KnowledgeBaseService().upload_by_str(content, filename, user_id=user_id)
     BM25Service().build_index(vector_store_service.get_all_documents())
