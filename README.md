@@ -19,7 +19,7 @@
 
 ## ⭐ 项目背景
 
-为企业内部及外部人员提供制度/资源的高效检索与问答服务，解决传统文档查找耗时、信息过载的痛点。
+面向企业内部知识管理与办公自动化场景，提供文档检索问答、报告生成、格式转换、邮件发送等一站式 AI 办公能力。用自然语言驱动 Agent，完成从信息查询到文件交付的完整闭环。
 
 ## 🧱 技术架构
 
@@ -169,6 +169,12 @@ SILICON_API_KEY=你的API_KEY
 DASHSCOPE_API_KEY=你的API_KEY
 SILICON_BASE_URL=https://api.deepseek.com
 SILICON_MODEL=deepseek-chat
+
+# 邮件发送（可选，使用邮件功能时需要）
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=587
+SMTP_USER=你的QQ号@qq.com
+SMTP_PASSWORD=QQ邮箱授权码
 ```
 
 ### 4. 启动 Redis（使用缓存功能时需要）
@@ -207,6 +213,8 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 | RabbitMQ 连接失败 | 检查 vhost 用户权限是否为 `.*`（正则），不能只用 `*` |
 | 文档上传后无响应 | 检查 RabbitMQ 是否运行，Redis 是否可连接（文件内容通过 Redis 传递） |
 | Redis 连接失败 | 缓存功能自动降级，不影响核心问答；启动 Redis 后重启服务即可启用 |
+| 邮件发送失败 | 检查 `.env` 中 SMTP 配置是否正确，QQ 邮箱需使用授权码而非登录密码 |
+| 报告下载按钮不显示 | 确保 `app/data/report/` 目录存在，重启服务后自动创建 |
 
 # 更新日志
 
@@ -225,22 +233,3 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 ### 🗺️ 路线图
 
 **近期计划**
-
-- Docker 一键部署
-- 会话全文检索与过滤
-- 文档管理增强（列表查看、删除）
-- 查询意图分类，按需启用 BM25
-
-**🤖 Agent 升级方案（v2.0 目标）**
-
-从被动检索式 RAG 升级为具备自主决策能力的 Agent，最终打造一个能理解指令、调用工具、处理文件的智能办公助手。
-
-| 阶段 | 内容 | 说明 |
-|------|------|------|
-| **1. Agent 架构升级** | ✅ 已完成 | RAG 链式调用 → Agent 自主决策 |
-| **2. 上下文持久化记忆** | ✅ 已完成 | 多轮会话记忆 |
-| **3. Function Calling 工具封装** | ✅ 已完成 | 将现有 HyDE 检索、BM25 召回、Rerank 重排序等能力封装成标准 Function Calling 工具 |
-| **4. AgentExecutor 串联** | ✅ 已完成 | 通过 `AgentExecutor` 将工具集、LLM 推理串联，跑通首个能自主决策的 Agent 工作流 |
-| **5. 智能办公助手** | ✅ 已完成 | 报告生成 + 格式转换 + 邮件发送 + 附件支持 |
-
-> 🔗 技术路线：`RAG 检索能力` → `Function Calling Tool 封装` → `AgentExecutor (Tools + Memory + LLM)` → `智能办公助手` ✅ 已达成
