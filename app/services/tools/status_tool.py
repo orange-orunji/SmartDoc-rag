@@ -1,3 +1,4 @@
+import os
 import time
 
 from langchain_core.tools import tool
@@ -69,6 +70,10 @@ def generate_report(topic : str = "", format : str = "md") :
     """
     # 1. 检索
     basa_context = hyde_plus_rerank_bm25_retrieve(topic)
+    if not basa_context:
+        return "知识库中没有关于该主题的文档，无法生成报告。"
+    if not basa_context:
+        return "知识库中没有关于该主题的文档，无法生成报告。"
 
     # 2.LLM 汇总
     content  = "\n".join(doc.page_content for doc in basa_context)
@@ -97,38 +102,39 @@ def send_email(to : str = "", subject : str = "", body : str = "", attachment : 
     :return:
     """
     s = get_settings()
-    #     流程：
-    #       1. 用 smtplib 连接 SMTP 服务器
-    import smtplib
-    smtp_obj = smtplib.SMTP(s.SMTP_HOST, s.SMTP_PORT)
-    smtp_obj.starttls()
-    smtp_obj.login(s.SMTP_USER, s.SMTP_PASSWORD)
+    try:
+        import smtplib
+        smtp_obj = smtplib.SMTP(s.SMTP_HOST, s.SMTP_PORT)
+        smtp_obj.starttls()
+        smtp_obj.login(s.SMTP_USER, s.SMTP_PASSWORD)
 
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    #       2. 构建 MIMEMultipart 邮件（支持正文 + 附件）
-    msg = MIMEMultipart()
-    msg["From"] = s.SMTP_USER
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain", "utf-8"))
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        #       2. 构建 MIMEMultipart 邮件（支持正文 + 附件）
+        msg = MIMEMultipart()
+        msg["From"] = s.SMTP_USER
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
 
-    from email import encoders
-    from email.mime.base import MIMEBase
-    #       3. 如果有附件，从 report 目录读取并附加
-    if attachment:
-        file_path = f"{s.REPORT_FILE_PATH}/{attachment}"
-        with open(file_path, "rb") as f:
-            part = MIMEBase("application", "octet-stream")  # 通用二进制类型
-            part.set_payload(f.read())                      # 读入原始字节
-            encoders.encode_base64(part)                    # 转 Base64
-            part.add_header("Content-Disposition", f"attachment; filename={attachment}")
-            msg.attach(part)                                # 附加附件
+        from email import encoders
+        from email.mime.base import MIMEBase
+        #       3. 如果有附件，从 report 目录读取并附加
+        if attachment:
+            file_path = f"{s.REPORT_FILE_PATH}/{attachment}"
+            with open(file_path, "rb") as f:
+                part = MIMEBase("application", "octet-stream")  # 通用二进制类型
+                part.set_payload(f.read())                      # 读入原始字节
+                encoders.encode_base64(part)                    # 转 Base64
+                part.add_header("Content-Disposition", f"attachment; filename={attachment}")
+                msg.attach(part)                                # 附加附件
 
-    #       4. 发送邮件
-    smtp_obj.sendmail(s.SMTP_USER, to, msg.as_string())
-    smtp_obj.quit()
-    return f"邮件已发送至 {to}，主题：{subject}"
+        #       4. 发送邮件
+        smtp_obj.sendmail(s.SMTP_USER, to, msg.as_string())
+        smtp_obj.quit()
+        return f"邮件已发送至 {to}，主题：{subject}"
+    except Exception as e:
+        return f"邮件发送失败：{str(e)}"
 
 
 @tool
@@ -144,7 +150,10 @@ def convert_format(filename : str = "", target_format : str = "") :
 
     # 1. 从 app/data/report/ 读取源文件
     s = get_settings()
-    with open(f"{s.REPORT_FILE_PATH}/{filename}", "r", encoding="utf-8") as f:
+    src_path = f"{s.REPORT_FILE_PATH}/{filename}"
+    if not os.path.exists(src_path):
+        return f"文件 {filename} 不存在，请确认文件名是否正确。"
+    with open(src_path, "r", encoding="utf-8") as f:
         content = f.read()
 
     filename = filename.split("_",1)[0]
