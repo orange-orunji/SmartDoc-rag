@@ -232,4 +232,18 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 ### 🗺️ 路线图
 
-**近期计划**
+**近期计划：Agent 架构升级（AgentExecutor → LangGraph）**
+
+> 现状：Agent 基于 `langchain_classic` 的 `AgentExecutor`（官方已标记为 legacy），存在三个局限：
+> ① 流程只能靠 Prompt 软约束，无法强制"先检索后回答"；② 对话历史需手工拼接注入；③ 回答为整段返回，非真正的 token 级流式。
+
+| 阶段 | 整改内容 | 预期收益 |
+|------|---------|---------|
+| 一期 | 引入 `langgraph`，用预置 `create_react_agent` 替换 `AgentExecutor`，复用现有 6 个工具与系统提示词 | 真·token 级流式输出，代码与 LangChain 官方主线对齐 |
+| 一期 | 用 Checkpointer 接管多轮记忆（thread_id 按用户+会话隔离），与现有 JSON 历史文件双写过渡 | 告别手工拼接历史文本，多轮状态自动持久化 |
+| 二期 | 自定义 StateGraph：将"必须先检索知识库"从 Prompt 规则升级为图结构硬约束（入口强制经过检索节点） | 检索流程由代码保证而非模型自觉，Prompt 大幅精简 |
+| 二期 | 敏感操作人机协同：`send_email` 等工具执行前 interrupt 中断，等待用户确认后恢复执行 | 避免误发邮件，Agent 行为更可控 |
+
+**远期计划**
+
+- 多 Agent 协作架构：基于 LangGraph Supervisor 模式，拆分知识库 Agent（检索/统计/上传）与办公 Agent（报告/转换/邮件），由主管 Agent 统一调度
