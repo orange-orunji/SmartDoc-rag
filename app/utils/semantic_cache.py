@@ -7,8 +7,9 @@ from app.utils.redis_client import get_redis
 
 
 class SemanticCache:
-    def __init__(self, similarity_threshold: float = 0.85):
+    def __init__(self, similarity_threshold: float = 0.85, max_size: int = 200):
         self.threshold = similarity_threshold
+        self.max_size = max_size
         self._embedding = DashScopeEmbeddings(
             dashscope_api_key=os.getenv("DASHSCOPE_API_KEY")
         )
@@ -32,11 +33,16 @@ class SemanticCache:
             return None
 
         query_vec = self._encode(question)
-        matrix = np.vstack(self._question_vecs)
-        scores = np.dot(matrix, query_vec)
-        best_idx = int(np.argmax(scores))
+        # 逐条计算余弦相似度，取最大值（不再用 np.vstack 全量矩阵）
+        best_score = -1.0
+        best_idx = -1
+        for i, cached_vec in enumerate(self._question_vecs):
+            score = float(np.dot(cached_vec, query_vec))
+            if score > best_score:
+                best_score = score
+                best_idx = i
 
-        if scores[best_idx] >= self.threshold:
+        if best_idx >= 0 and best_score >= self.threshold:
             key = self._redis_keys[best_idx]
             cached = redis_client.get(key)
             if cached:
@@ -51,6 +57,11 @@ class SemanticCache:
 
         qhash = hashlib.md5(question.encode()).hexdigest()[:12]
         key = f"{self._settings.REDIS_USER_PREFIX}:semantic:{user_id}:{qhash}"
+
+        # LRU 淘汰：超过上限踢掉最老的
+        if len(self._question_vecs) >= self.max_size:
+            self._question_vecs.pop(0)
+            self._redis_keys.pop(0)
 
         self._question_vecs.append(self._encode(question))
         self._redis_keys.append(key)

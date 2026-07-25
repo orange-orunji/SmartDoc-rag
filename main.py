@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 import asyncio
 
 from fastapi import FastAPI, Request
@@ -16,16 +15,12 @@ from app.api.auth import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.services import vector_store
-from app.services.KnowledgeBase_md5_service import KnowledgeBaseService
-from app.services.document import _extract_text
 from app.services.vector_store import VectorStoreService
 from app.services.bm25_service import BM25Service
 from app.utils.SQL_database import engine, Base
 from app.utils.rabbitmq import rabbitmq
-from app.utils.redis_client import get_redis
-from app.utils.task_status import TaskTracker, TaskStatus
-from app.services.vector_store import vector_store_service as vs_svc
 from app.config.settings import get_settings, BASE_DIR
+from app.utils.task_handler import handle_document_upload
 
 # ── 日志系统初始化 ──
 cfg = get_settings()
@@ -42,45 +37,8 @@ logger = logging.getLogger("rag")
 
 
 async def _handle_document_upload(payload: dict):
-    """消息队列异步处理文档上传任务（内嵌 Worker，带幂等防护）"""
-    task_id = payload["task_id"]
-    filename = payload["filename"]
-    user_id = payload.get("user_id", "system")
-
-    # ── 幂等性检查 ──
-    idempotent_key = f"task:processed:{task_id}"
-    redis = get_redis()
-    if redis and redis.exists(idempotent_key):
-        logger.warning("重复消息已跳过 | task_id=%s", task_id)
-        return
-
-    content_hex = redis.get(f"file:content:{task_id}") if redis else None
-    if not content_hex:
-        TaskTracker.set_status(task_id, TaskStatus.FAILED, {"error": "文件内容已过期或丢失"})
-        return
-    content = bytes.fromhex(content_hex)
-    redis.delete(f"file:content:{task_id}")
-
-    TaskTracker.set_status(task_id, TaskStatus.PROCESSING)
-    logger.info("开始处理文档 | task_id=%s | filename=%s", task_id, filename)
-
-    try:
-        suffix = Path(filename).suffix.lower()
-        text = await _extract_text(content, suffix)
-        if not text.strip():
-            TaskTracker.set_status(task_id, TaskStatus.FAILED, {"error": "文件内容为空"})
-            return
-        kb_service = KnowledgeBaseService()
-        kb_service.upload_by_str(text, filename, user_id=user_id)
-        all_docs = vs_svc.get_all_documents()
-        BM25Service().build_index(all_docs)
-        if redis:
-            redis.setex(idempotent_key, 86400, "1")
-        TaskTracker.set_status(task_id, TaskStatus.COMPLETED, {"filename": filename})
-        logger.info("文档处理完成 | task_id=%s", task_id)
-    except Exception as e:
-        logger.exception("文档处理失败 | task_id=%s", task_id)
-        raise  # 让 RabbitMQ 重试机制接管
+    """消息队列异步处理文档上传任务（带幂等防护）"""
+    await handle_document_upload(payload)
 
 
 @asynccontextmanager

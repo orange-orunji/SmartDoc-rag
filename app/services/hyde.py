@@ -33,7 +33,7 @@ def hyde_retrieve(question : str,k : int = 3):
 # rerank后hyde检索
 def hyde_plus_rerank_retrieve(question : str, k : int = 3):
     vector = _vs.get_vector(query=generate_hypothetical(question), k=k)
-    return rerank(query=generate_hypothetical(question),docs=vector,top_k=k)
+    return rerank(query=question,docs=vector,top_k=k)
 
     #hyde检索后进行BM25计算后返回rank
 def hyde_plus_rerank_bm25_retrieve(question : str, k_vector: int = 15, k_keyword: int = 10, final_k: int = 3):

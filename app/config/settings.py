@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Tuple, Literal
 from functools import lru_cache
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 获取项目根目录（settings.py 位于 app/config/ 下，往上三层才是根目录）
@@ -19,6 +20,14 @@ class settings(BaseSettings):
 
     # ── CORS ──
     CORS_ORIGINS: list[str] = ["http://localhost:8501", "http://127.0.0.1:8000", "http://localhost:3000"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """兼容 .env 中的逗号分隔字符串，自动拆分为列表"""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # ── API 配置 ──
     SILICON_API_KEY: str

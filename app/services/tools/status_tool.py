@@ -72,8 +72,6 @@ def generate_report(topic : str = "", format : str = "md") :
     basa_context = hyde_plus_rerank_bm25_retrieve(topic)
     if not basa_context:
         return "知识库中没有关于该主题的文档，无法生成报告。"
-    if not basa_context:
-        return "知识库中没有关于该主题的文档，无法生成报告。"
 
     # 2.LLM 汇总
     content  = "\n".join(doc.page_content for doc in basa_context)
