@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.utils.SQL_database import SessionLocal
-from app.schemas.user import User
+from app.schemas.user import User, AuthResponse
 from app.utils.auth import generate_hash_password, verify_password, create_access_token
 from pydantic import BaseModel
 
@@ -29,7 +29,7 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/register")
+@router.post("/register", response_model=AuthResponse)
 def register(request : AutoRequest,db : Session = Depends(get_db)):
     # 密码长度校验（bcrypt 限制 72 字节）
     if len(request.password.encode('utf-8')) > 72:
@@ -45,7 +45,7 @@ def register(request : AutoRequest,db : Session = Depends(get_db)):
     return {"message":"用户注册成功"}
 
 
-@router.post("/login")
+@router.post("/login", response_model=AuthResponse)
 def login(request : AutoRequest,db : Session = Depends(get_db)):
     target_user = db.query(User).filter(User.username == request.username).first()
     if not target_user or not verify_password(request.password,target_user.hashed_password):

@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Request
@@ -9,7 +10,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from app.agent.agent import get_agent
 from app.api.auth import current_user_ctx
-from app.schemas.chat import ChatRequest, RenameRequest
+from app.schemas.chat import ChatRequest, RenameRequest, HistoryResponse, SessionListResponse, SessionActionResponse
 from app.services.history_service import get_file_chat_history
 from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
@@ -34,7 +35,7 @@ def _sse_escape(text: str) -> str:
 @limiter.limit("10/minute")
 async def stream_chat(request: Request, body: ChatRequest, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["user_id"])
-
+    t_start = time.time()
     if redis:
         # 1. 语义相似度缓存
         cached_answer = semantic_cache.lookup(body.question, user_id)
@@ -42,6 +43,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             async def cache_stream():
                 yield f"data: {_sse_escape(cached_answer)}\n\n"
                 yield "data: [DONE]\n\n"
+            logger.info("缓存命中 | type=semantic | user=%s | 耗时=%.2fs", user_id, time.time() - t_start)
             return StreamingResponse(cache_stream(), 200, media_type="text/event-stream")
 
         # 2. MD5 精确匹配缓存（兜底）
@@ -52,9 +54,11 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             async def cache_stream():
                 yield f"data: {_sse_escape(redis_chat_history)}\n\n"
                 yield "data: [DONE]\n\n"
+            logger.info("缓存命中 | type=md5 | user=%s | 耗时=%.2fs", user_id, time.time() - t_start)
             return StreamingResponse(cache_stream(), 200, media_type="text/event-stream")
 
     async def event_stream():
+        t_start = time.time()
         all_request = ""
         chat_history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
         try:
@@ -111,10 +115,11 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             history = chat_history
             history.add_message(HumanMessage(content=body.question))
             history.add_message(AIMessage(content=all_request))
+            logger.info("对话完成 | user=%s | 耗时=%.2fs | 回复长度=%d", user_id, time.time() - t_start, len(all_request))
             yield "data: [DONE]\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
-@router.get("/history/{session_id}")
+@router.get("/history/{session_id}", response_model=HistoryResponse)
 async def get_history(session_id: str, current_user: dict = Depends(get_current_user)):
     history = get_file_chat_history(session_id,user_id=current_user["user_id"])
     # 将 BaseMessage 列表转为可序列化的字典列表
@@ -126,7 +131,7 @@ async def get_history(session_id: str, current_user: dict = Depends(get_current_
         })
     return {"messages": messages}
 
-@router.get("/sessions")
+@router.get("/sessions", response_model=SessionListResponse)
 async def get_user_sessions(current_user: dict = Depends(get_current_user)):
     """对话管理"""
     user_id = str(current_user["user_id"])
@@ -145,7 +150,7 @@ async def get_user_sessions(current_user: dict = Depends(get_current_user)):
     return {"sessions": sessions}
 
 
-@router.delete("/session/{session_id}")
+@router.delete("/session/{session_id}", response_model=SessionActionResponse)
 async def delete_session(session_id: str, current_user: dict = Depends(get_current_user)):
     """删除指定会话"""
     user_id = str(current_user["user_id"])
@@ -159,7 +164,7 @@ async def delete_session(session_id: str, current_user: dict = Depends(get_curre
     return {"code": 200, "message": f"会话 {session_id} 已删除"}
 
 
-@router.put("/session/{session_id}/rename")
+@router.put("/session/{session_id}/rename", response_model=SessionActionResponse)
 async def rename_session(session_id: str, request: RenameRequest, current_user: dict = Depends(get_current_user)):
     """重命名指定会话"""
     user_id = str(current_user["user_id"])

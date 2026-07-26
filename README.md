@@ -30,7 +30,7 @@
 ├── SSE 流式对话
 │   ├── 🤖 Agent 智能体（主路径）─ create_tool_calling_agent + AgentExecutor
 │   │   ├── search_knowledge_base ─ HyDE + 向量 + BM25 + Rerank 全流程检索
-│   │   ├── upload_document ─ 文档内容直接入库
+│   │   ├── upload_document ─ 文档内容异步入库（RabbitMQ）
 │   │   ├── get_document_status ─ 知识库统计 + 关键词过滤
 │   │   ├── generate_report ─ 检索 + LLM 汇总 → Markdown 报告
 │   │   ├── convert_format ─ 报告格式转换（md/txt/docx）
@@ -63,7 +63,7 @@
 - **异步文档处理**：基于 RabbitMQ 消息队列的异步上传架构，文件内容临时存于 Redis，内嵌 Worker 后台消费，接口即时响应（HTTP 202）
 - **上传任务追踪**：文档上传后通过 task_id 轮询处理状态（Pending → Processing → Completed/Failed）
 - **文档 MD5 去重**：上传时自动检测内容 MD5，避免相同文档重复入库，同时重建 BM25 全量索引
-- **双层热点缓存**：MD5 精确匹配（Redis）+ 语义相似度匹配（内存向量），缓存命中时延迟从 ~20s 降至 ~0.01s
+- **双层热点缓存**：MD5 精确匹配（Redis）+ 语义相似度匹配（内存向量 LRU 上限 200 条），缓存命中时延迟从 ~20s 降至 ~0.01s
 - **流式 SSE 响应**：服务端推送 + 前端打字机效果，Markdown 实时渲染（表格、代码块、标题、列表）
 - **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯
 - **多用户认证与隔离**：JWT 认证 + HTTP Bearer Token，用户数据完全物理隔离
@@ -112,6 +112,7 @@ RAG_Personal/
 │   ├── utils/                       # 工具模块
 │   │   ├── auth.py                  # JWT + 密码哈希
 │   │   ├── SQL_database.py          # SQLite 连接
+│   │   ├── task_handler.py            # 公共文档处理 + BM25 防抖重建
 │   │   ├── redis_client.py          # Redis 客户端
 │   │   ├── rabbitmq.py              # RabbitMQ 客户端
 │   │   ├── semantic_cache.py        # 语义缓存
@@ -222,7 +223,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
-| **1.7.0** | 2026-07-17 | 工程化加固：Agent 上传走消息队列、语义缓存 LRU 限制、BM25 防抖重建、CORS 拆分、空壳清理 |
+| **1.7.0** | 2026-07-17 | 工程化加固：Agent 上传走消息队列、语义缓存 LRU 限制、BM25 防抖重建、CORS 拆分、空壳清理、检索全链路耗时日志、API 响应 Schema 补全 |
 | **1.6.0** | 2026-07-15 | 智能办公助手：报告生成 + 格式转换 + 邮件发送 + 附件支持 |
 | **1.5.0** | 2026-07-14 | Agent 升级：Function Calling 工具封装 + AgentExecutor 串联 + 多轮会话记忆 + DeepSeek 模型切换 |
 | **1.4.0** | 2026-07-09 | 工程化加固 |
