@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>写给你</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #2a1f24;
+      --ink-soft: #5c4a52;
+      --blush: #e8879a;
+      --blush-deep: #c45c74;
+      --petal: #f6cdd6;
+      --mist: #fff7f8;
+      --sky: #f0e8ea;
+      --cream-rose: #ffe8ec;
+      --line: rgba(42, 31, 36, 0.12);
+      --font-display: "Ma Shan Zheng", cursive;
+      --font-body: "Noto Sans SC", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--ink);
+      background: var(--mist);
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* —— Atmosphere —— */
+    .atmosphere {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background:
+        radial-gradient(ellipse 90% 70% at 15% 10%, #ffd6df 0%, transparent 55%),
+        radial-gradient(ellipse 70% 60% at 90% 20%, #f5d0c8 0%, transparent 50%),
+        radial-gradient(ellipse 80% 50% at 50% 100%, #e8d5dc 0%, transparent 55%),
+        linear-gradient(165deg, #fff9fa 0%, #f7e9ec 45%, #efe0e4 100%);
+    }
+
+    .atmosphere::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.35;
+      background-image:
+        radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.5) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.4) 0 1px, transparent 1.5px),
+        radial-gradient(circle at 40% 80%, rgba(232, 135, 154, 0.25) 0 1px, transparent 1.5px);
+      background-size: 120px 120px, 180px 180px, 90px 90px;
+      animation: drift 40s linear infinite;
+    }
+
+    @keyframes drift {
+      from { transform: translateY(0); }
+      to { transform: translateY(-120px); }
+    }
+
+    #petals {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      overflow: hidden;
+    }
+
+    .petal {
+      position: absolute;
+      top: -40px;
+      width: 14px;
+      height: 12px;
+      background: var(--blush);
+      border-radius: 80% 0 80% 0;
+      opacity: 0.55;
+      animation: fall linear infinite;
+    }
+
+    .petal:nth-child(odd) {
+      background: var(--petal);
+      border-radius: 0 80% 0 80%;
+    }
+
+    @keyframes fall {
+      0% {
+        transform: translateY(0) rotate(0deg) translateX(0);
+        opacity: 0;
+      }
+      8% { opacity: 0.6; }
+      100% {
+        transform: translateY(110vh) rotate(720deg) translateX(60px);
+        opacity: 0;
+      }
+    }
+
+    /* —— Hero —— */
+    .hero {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 2rem 1.5rem 4rem;
+      position: relative;
+    }
+
+    .hero-inner {
+      width: min(560px, 100%);
+      text-align: center;
+      animation: rise-in 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    @keyframes rise-in {
+      from {
+        opacity: 0;
+        transform: translateY(28px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .brand {
+      font-family: var(--font-display);
+      font-size: clamp(3.2rem, 12vw, 5.5rem);
+      line-height: 1.05;
+      letter-spacing: 0.06em;
+      color: var(--ink);
+      margin-bottom: 1.25rem;
+    }
+
+    .brand span {
+      display: block;
+      font-size: 0.38em;
+      letter-spacing: 0.35em;
+      color: var(--blush-deep);
+      margin-top: 0.35em;
+      font-family: var(--font-body);
+      font-weight: 400;
+    }
+
+    .headline {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 5vw, 2.2rem);
+      font-weight: 400;
+      color: var(--ink-soft);
+      margin-bottom: 0.75rem;
+    }
+
+    .lede {
+      font-size: 0.95rem;
+      font-weight: 300;
+      line-height: 1.75;
+      color: var(--ink-soft);
+      margin-bottom: 2.25rem;
+    }
+
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.9rem 1.75rem;
+      background: var(--blush-deep);
+      color: #fff;
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      border: none;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: background 0.25s ease, transform 0.25s ease;
+    }
+
+    .cta:hover {
+      background: var(--ink);
+      transform: translateY(-2px);
+    }
+
+    .cta svg {
+      width: 16px;
+      height: 16px;
+      animation: bob 1.8s ease-in-out infinite;
+    }
+
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(4px); }
+    }
+
+    /* —— Letter —— */
+    .letter {
+      padding: 0 1.5rem 5rem;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .letter-mark {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      color: var(--blush-deep);
+      margin-bottom: 1.5rem;
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+
+    .letter-mark.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .letter p {
+      font-size: 1.05rem;
+      font-weight: 300;
+      line-height: 2;
+      color: var(--ink-soft);
+      margin-bottom: 1.35rem;
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+
+    .letter p.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .letter .sign {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      text-align: right;
+      color: var(--ink);
+      margin-top: 2rem;
+    }
+
+    /* —— Question —— */
+    .ask {
+      padding: 2rem 1.5rem 6rem;
+      text-align: center;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    .ask h2 {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 7vw, 3rem);
+      margin-bottom: 0.75rem;
+      opacity: 0;
+      transform: scale(0.96);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+
+    .ask h2.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .ask .hint {
+      font-size: 0.9rem;
+      font-weight: 300;
+      color: var(--ink-soft);
+      margin-bottom: 2.5rem;
+      opacity: 0;
+      transition: opacity 0.8s ease 0.15s;
+    }
+
+    .ask .hint.visible {
+      opacity: 1;
+    }
+
+    .actions {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1.5rem;
+      min-height: 120px;
+      flex-wrap: wrap;
+    }
+
+    .btn-yes,
+    .btn-no {
+      font-family: var(--font-body);
+      font-size: 1rem;
+      padding: 0.95rem 2.2rem;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 0.12em;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .btn-yes {
+      background: var(--blush-deep);
+      color: #fff;
+      border: 1.5px solid var(--blush-deep);
+    }
+
+    .btn-yes:hover {
+      background: var(--ink);
+      border-color: var(--ink);
+      transform: scale(1.04);
+    }
+
+    .btn-no {
+      background: transparent;
+      color: var(--ink-soft);
+      border: 1.5px solid var(--line);
+      position: absolute;
+      left: 55%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      transition: left 0.15s ease, top 0.15s ease, border-color 0.2s;
+    }
+
+    .btn-no:hover {
+      border-color: var(--blush);
+      color: var(--blush-deep);
+    }
+
+    @media (max-width: 560px) {
+      .btn-no {
+        position: relative;
+        left: auto;
+        top: auto;
+        transform: none;
+      }
+
+      .actions {
+        flex-direction: column;
+      }
+
+      .btn-no.mobile-flee {
+        position: absolute;
+        z-index: 5;
+      }
+    }
+
+    /* —— Accepted —— */
+    .accepted {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background:
+        radial-gradient(ellipse at 50% 40%, #ffe4ea 0%, #fff7f8 55%, #f0e4e8 100%);
+      place-items: center;
+      padding: 2rem;
+      text-align: center;
+      animation: fade-veil 0.6s ease both;
+    }
+
+    .accepted.show {
+      display: grid;
+    }
+
+    @keyframes fade-veil {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .accepted-inner {
+      animation: rise-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+    }
+
+    .accepted .heart {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 1.5rem;
+      position: relative;
+      animation: pulse-heart 1.2s ease-in-out infinite;
+    }
+
+    .accepted .heart::before,
+    .accepted .heart::after {
+      content: "";
+      position: absolute;
+      width: 30px;
+      height: 48px;
+      background: var(--blush-deep);
+      border-radius: 30px 30px 0 0;
+      top: 0;
+    }
+
+    .accepted .heart::before {
+      left: 28px;
+      transform: rotate(-45deg);
+      transform-origin: 0 100%;
+    }
+
+    .accepted .heart::after {
+      left: 0;
+      transform: rotate(45deg);
+      transform-origin: 100% 100%;
+    }
+
+    @keyframes pulse-heart {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+
+    .accepted h2 {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 8vw, 3.8rem);
+      margin-bottom: 0.75rem;
+    }
+
+    .accepted p {
+      font-weight: 300;
+      color: var(--ink-soft);
+      line-height: 1.8;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    .music-toggle {
+      position: fixed;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      z-index: 60;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1.5px solid var(--line);
+      background: rgba(255, 247, 248, 0.85);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      color: var(--ink-soft);
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .music-toggle:hover,
+    .music-toggle.on {
+      border-color: var(--blush-deep);
+      color: var(--blush-deep);
+    }
+
+    .music-toggle svg {
+      width: 18px;
+      height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"></div>
+  <div id="petals" aria-hidden="true"></div>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <h1 class="brand">
+        阿柚
+        <span>FOR YOU</span>
+      </h1>
+      <p class="headline">有一件事，想认真告诉你</p>
+      <p class="lede">不是一时兴起，是攒了很久的勇气。</p>
+      <a class="cta" href="#letter">
+        往下看
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </a>
+    </div>
+  </section>
+
+  <section class="letter" id="letter">
+    <p class="letter-mark reveal">亲爱的：</p>
+    <p class="reveal">从遇见你开始，世界好像慢了一拍。你说话时眼睛会弯起来，走路时风也跟着轻一点——这些小事，我都记得。</p>
+    <p class="reveal">我不是想用华丽的句子打动你，只是想坦白：喜欢你，是我这段时间里最确定的一件事。</p>
+    <p class="reveal">如果可以，我想把以后的很多个平凡日子，都和你一起过。</p>
+    <p class="sign reveal">—— 一直想对你说</p>
+  </section>
+
+  <section class="ask" id="ask">
+    <h2 class="reveal">做我的女朋友，好不好？</h2>
+    <p class="hint reveal">左边是真心，右边……你可以试试</p>
+    <div class="actions">
+      <button type="button" class="btn-yes" id="btnYes">愿意</button>
+      <button type="button" class="btn-no" id="btnNo">再想想</button>
+    </div>
+  </section>
+
+  <div class="accepted" id="accepted" role="dialog" aria-modal="true" aria-labelledby="accepted-title">
+    <div class="accepted-inner">
+      <div class="heart" aria-hidden="true"></div>
+      <h2 id="accepted-title">真好</h2>
+      <p>从这一刻起，你是我最想见的人。<br />剩下的故事，我们慢慢写。</p>
+    </div>
+  </div>
+
+  <button type="button" class="music-toggle" id="musicBtn" aria-label="播放背景音乐" title="背景音乐">
+    <svg id="iconPlay" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    <svg id="iconPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+  </button>
+
+  <!-- 可选：把 src 换成你喜欢的 mp3 地址 -->
+  <audio id="bgm" loop preload="none">
+    <source src="" type="audio/mpeg" />
+  </audio>
+
+  <script>
+    (function () {
+      /* —— Config：改这里定制 —— */
+      const CONFIG = {
+        name: "yy",           // 对方名字（品牌级大标题）
+        question: "做我的女朋友，好不好？",
+        musicSrc: "",           // 例如："./music.mp3"
+      };
+
+      document.querySelector(".brand").innerHTML =
+        CONFIG.name + '<span>FOR YOU</span>';
+      document.querySelector(".ask h2").textContent = CONFIG.question;
+
+      /* Petals */
+      const petalBox = document.getElementById("petals");
+      for (let i = 0; i < 18; i++) {
+        const el = document.createElement("span");
+        el.className = "petal";
+        el.style.left = Math.random() * 100 + "%";
+        el.style.animationDuration = 8 + Math.random() * 10 + "s";
+        el.style.animationDelay = Math.random() * 12 + "s";
+        el.style.width = 10 + Math.random() * 10 + "px";
+        el.style.height = 8 + Math.random() * 8 + "px";
+        el.style.opacity = String(0.35 + Math.random() * 0.4);
+        petalBox.appendChild(el);
+      }
+
+      /* Reveal on scroll */
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) e.target.classList.add("visible");
+          });
+        },
+        { threshold: 0.2 }
+      );
+      document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+      /* Fleeing "no" button */
+      const btnNo = document.getElementById("btnNo");
+      const actions = document.querySelector(".actions");
+      let fleeCount = 0;
+
+      function moveNo(e) {
+        if (e) e.preventDefault();
+        fleeCount++;
+        const rect = actions.getBoundingClientRect();
+        const btnW = btnNo.offsetWidth;
+        const btnH = btnNo.offsetHeight;
+        const pad = 8;
+        const maxX = Math.max(pad, rect.width - btnW - pad);
+        const maxY = Math.max(pad, rect.height - btnH - pad);
+        const x = pad + Math.random() * maxX;
+        const y = pad + Math.random() * maxY;
+
+        btnNo.classList.add("mobile-flee");
+        btnNo.style.position = "absolute";
+        btnNo.style.left = x + "px";
+        btnNo.style.top = y + "px";
+        btnNo.style.transform = "none";
+
+        if (fleeCount >= 5) {
+          btnNo.textContent = "其实……愿意";
+        }
+        if (fleeCount >= 8) {
+          accept();
+        }
+      }
+
+      btnNo.addEventListener("mouseenter", moveNo);
+      btnNo.addEventListener("touchstart", moveNo, { passive: false });
+      btnNo.addEventListener("click", (e) => {
+        e.preventDefault();
+        moveNo();
+      });
+
+      /* Yes */
+      const accepted = document.getElementById("accepted");
+      function accept() {
+        accepted.classList.add("show");
+        burstPetals();
+      }
+      document.getElementById("btnYes").addEventListener("click", accept);
+
+      function burstPetals() {
+        for (let i = 0; i < 24; i++) {
+          const el = document.createElement("span");
+          el.className = "petal";
+          el.style.left = 30 + Math.random() * 40 + "%";
+          el.style.top = "40%";
+          el.style.animationDuration = 3 + Math.random() * 4 + "s";
+          el.style.animationDelay = Math.random() * 0.5 + "s";
+          petalBox.appendChild(el);
+        }
+      }
+
+      /* Music (needs a real src to work) */
+      const audio = document.getElementById("bgm");
+      const musicBtn = document.getElementById("musicBtn");
+      const iconPlay = document.getElementById("iconPlay");
+      const iconPause = document.getElementById("iconPause");
+
+      if (CONFIG.musicSrc) {
+        audio.src = CONFIG.musicSrc;
+      }
+
+      musicBtn.addEventListener("click", async () => {
+        if (!audio.src || audio.src === location.href) {
+          musicBtn.title = "请先在 CONFIG.musicSrc 填入音乐地址";
+          return;
+        }
+        if (audio.paused) {
+          try {
+            await audio.play();
+            musicBtn.classList.add("on");
+            iconPlay.style.display = "none";
+            iconPause.style.display = "block";
+          } catch (_) {}
+        } else {
+          audio.pause();
+          musicBtn.classList.remove("on");
+          iconPlay.style.display = "block";
+          iconPause.style.display = "none";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
