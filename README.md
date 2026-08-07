@@ -12,6 +12,7 @@
 - [检索策略对比](#-检索策略对比)
 - [项目结构](#-项目结构)
 - [快速开始](#-快速开始)
+- [Docker 一键部署](#-docker-一键部署)
 - [常见问题](#-常见问题)
 - [更新日志](#更新日志)
 
@@ -51,6 +52,47 @@
 ```
 
 > 前端为纯 HTML/CSS/JS 单页应用，由 FastAPI 直接托管，无需额外进程。
+
+### 🔍 检索链路
+
+```mermaid
+graph LR
+    Q[用户问题] --> Cache{双层缓存命中?}
+    Cache -->|命中| A[直接返回缓存答案]
+    Cache -->|未命中| HyDE[HyDE 假设文档生成]
+    HyDE --> Emb[DashScope Embedding]
+    Emb --> Vec[Chroma 向量检索]
+    Q --> Jieba[jieba 分词]
+    Jieba --> BM25[BM25 关键词召回]
+    Vec --> Rerank[BGE-Reranker 重排序]
+    BM25 --> Rerank
+    Rerank --> Top3[Top-3 上下文]
+    Top3 --> LLM[LLM 生成回答]
+    LLM --> Store[写入双层缓存]
+```
+
+### 📤 文档异步上传链路
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant API as FastAPI
+    participant R as Redis
+    participant MQ as RabbitMQ
+    participant W as 内嵌 Worker
+    participant C as Chroma
+
+    U->>API: 上传文档
+    API->>API: MD5 去重校验
+    API->>R: 文件内容暂存（600s 过期）
+    API->>MQ: 发布消息（Topic 交换机）
+    API-->>U: HTTP 202 + task_id
+    MQ->>W: 消费消息
+    W->>C: 解析 → 分块 → 向量化入库
+    W->>W: 重建 BM25 索引（防抖）
+    U->>API: 轮询任务状态
+    API-->>U: Pending → Processing → Completed
+```
 
 ## ✨ 核心亮点
 
@@ -203,6 +245,29 @@ python -m uvicorn main:app --host 127.0.0.1 --port 9000
 浏览器访问 `http://127.0.0.1:8000` 即可体验。
 
 > **注意**：HTML 前端已内置于 FastAPI 中，无需额外启动 Streamlit。旧版 Streamlit 前端（`app/ui.py`）仍保留可用。
+
+## 🐳 Docker 一键部署
+
+不想手动装环境？一条命令拉起全套（Redis + RabbitMQ + Worker + API）：
+
+```bash
+# 1. 配置 API Key（必填）
+cp .env.example .env   # 填入 SILICON_API_KEY / DASHSCOPE_API_KEY
+
+# 2. 下载 Reranker 模型到 models/ 目录（首次需要，会被打包进镜像）
+python download_models.py
+
+# 3. 一键启动
+docker compose up -d --build
+```
+
+| 服务 | 地址 |
+|------|------|
+| 🌐 应用前端 + API | http://localhost:8001 |
+| 🐰 RabbitMQ 管理台 | http://localhost:15673（rag / rag123456） |
+| 🗄️ Redis | localhost:6380 |
+
+> 💡 说明：`docker-compose.yml` 已通过 `env_file` 注入你的 `.env`，API Key 无需重复配置；向量库、对话历史、报告文件均通过 volume 持久化到宿主机 `app/data/`，容器重建不丢数据。
 
 ## 🔧 常见问题
 

@@ -5,10 +5,10 @@ services:
     image: redis:7-alpine
     container_name: smartdoc-redis
     ports:
-      - "6380:6379"                    
+      - "6380:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --requirepass <redis_password>
+    command: redis-server --requirepass rag123456
     restart: unless-stopped
 
   rabbitmq:
@@ -19,21 +19,10 @@ services:
       - "15673:15672"
     environment:
       RABBITMQ_DEFAULT_USER: rag
-      RABBITMQ_DEFAULT_PASS: <rabbitmq_password>
+      RABBITMQ_DEFAULT_PASS: rag123456
+      RABBITMQ_DEFAULT_VHOST: /rag
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    restart: unless-stopped
-
-  chroma:
-    image: chromadb/chroma:latest
-    container_name: smartdoc-chroma
-    ports:
-      - "8002:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    environment:
-      IS_PERSISTENT: TRUE
-      PERSIST_DIRECTORY: /chroma/chroma
     restart: unless-stopped
 
   worker:
@@ -45,20 +34,22 @@ services:
     depends_on:
       - redis
       - rabbitmq
-      - chroma
+    env_file:
+      - .env
     environment:
       ENV: production
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: rag123456
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: rag
-      RABBITMQ_PASSWORD: <rabbitmq_password>
+      RABBITMQ_PASSWORD: rag123456
       RABBITMQ_VHOST: /rag
     volumes:
-      - ./data/uploads:/app/data/uploads
-      - ./data/storage:/app/data/storage
-      - ./data/chat_history:/app/data/chat_history
+      - ./app/data/storage:/app/app/data/storage
+      - ./app/data/chat_history:/app/app/data/chat_history
+      - ./app/data/report:/app/app/data/report
     restart: unless-stopped
 
   api:
@@ -72,24 +63,26 @@ services:
     depends_on:
       - redis
       - rabbitmq
-      - chroma
       - worker
+    env_file:
+      - .env
     environment:
       ENV: production
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: rag123456
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: rag
-      RABBITMQ_PASSWORD: <rabbitmq_password>
+      RABBITMQ_PASSWORD: rag123456
       RABBITMQ_VHOST: /rag
     volumes:
-      - ./data/uploads:/app/data/uploads
-      - ./data/storage:/app/data/storage
-      - ./data/chat_history:/app/data/chat_history
+      - ./app/data/storage:/app/app/data/storage
+      - ./app/data/chat_history:/app/app/data/chat_history
+      - ./app/data/report:/app/app/data/report
+      - ./app/app.db:/app/app/app.db
     restart: unless-stopped
 
 volumes:
   redis_data:
   rabbitmq_data:
-  chroma_data:
