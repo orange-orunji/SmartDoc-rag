@@ -7,6 +7,7 @@ from app.config.settings import get_settings
 from app.services.tools.upload_tool import upload_document
 from app.services.tools.status_tool import get_document_status,generate_report,convert_format,send_email
 from app.services.tools.search_tool import search_knowledge_base
+from app.services.tools.query_router import query_router
 
 s = get_settings()
 _tools = [
@@ -16,6 +17,7 @@ _tools = [
          generate_report,
          convert_format,
          send_email,
+         query_router,
      ]
 _llm = ChatOpenAI(
             model=s.SILICON_MODEL,
@@ -28,7 +30,7 @@ _prompt = ChatPromptTemplate.from_messages([
     ("system", """你是一个企业知识库助手，帮助用户从已上传的文档中查找信息。
 
     ## 核心原则（必须严格遵守）
-    **所有用户提问，默认先调用 search_knowledge_base 检索知识库，再基于检索结果回答。**
+    **所有用户提问，默认先调用 query_router 来查询意图后在根据需要是否需要调用 search_knowledge_base 检索知识库，再基于检索结果回答。**
     不得未经检索就直接凭训练知识回答。
     
     ## 唯一例外（可以不调 search_knowledge_base）
