@@ -46,3 +46,5 @@ class BM25Service:
         self.documents.extend(new_docs)
         self.tokenizes_content.extend(new_tokens)
         self.bm25 = BM25Okapi(self.tokenizes_content)  # BM25Okapi 本身不支持增量，但数据量小时重建也很快
+
+bm25_service = BM25Service()

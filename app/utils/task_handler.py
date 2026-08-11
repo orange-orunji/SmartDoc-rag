@@ -6,7 +6,7 @@ from pathlib import Path
 from app.config.settings import get_settings
 from app.services.KnowledgeBase_md5_service import KnowledgeBaseService
 from app.services.document import _extract_text
-from app.services.bm25_service import BM25Service
+from app.services.bm25_service import bm25_service
 from app.utils.redis_client import get_redis
 from app.utils.task_status import TaskTracker, TaskStatus
 from app.services.vector_store import vector_store_service as vs_svc
@@ -39,7 +39,7 @@ async def _do_rebuild():
     await asyncio.sleep(5)
     try:
         all_docs = vs_svc.get_all_documents()
-        BM25Service().build_index(all_docs)
+        bm25_service.build_index(all_docs)
         logger.info("BM25 索引重建完成，文档数: %d", len(all_docs))
     except Exception:
         logger.exception("BM25 索引重建失败")

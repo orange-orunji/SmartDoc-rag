@@ -4,7 +4,7 @@ import logging
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-from app.services.bm25_service import BM25Service
+from app.services.bm25_service import bm25_service
 from app.services.rerank import rerank
 from app.config.settings import get_settings
 from app.services.vector_store import VectorStoreService
@@ -13,7 +13,7 @@ logger = logging.getLogger("rag.retrieval")
 
 s = get_settings()
 _vs = VectorStoreService(embedding_model=None)
-service = BM25Service()
+service = bm25_service
 
 llm = ChatOpenAI(
     model=s.SILICON_MODEL,

@@ -1,4 +1,4 @@
-from app.services.bm25_service import BM25Service
+from app.services.bm25_service import bm25_service
 from app.services.vector_store import vector_store_service
 
 from io import BytesIO
@@ -101,7 +101,7 @@ async def upload_documents(content: bytes, filename: str | None, current_user: d
     result = kb_service.upload_by_str(text, filename , user_id= user_id)
 
     all_docs = vector_store_service.get_all_documents()  # 获取所有文档
-    BM25Service().build_index(all_docs)  # 重建 BM25 索引
+    bm25_service.build_index(all_docs)  # 重建 BM25 索引
 
     return UnifiedResponse(
         code=200,

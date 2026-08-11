@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from app.api.auth import current_user_ctx
 from app.config.settings import get_settings
 from app.services.KnowledgeBase_md5_service import KnowledgeBaseService
-from app.services.bm25_service import BM25Service
+from app.services.bm25_service import bm25_service
 from app.services.vector_store import vector_store_service
 from app.utils.rabbitmq import rabbitmq
 from app.utils.redis_client import get_redis
@@ -66,7 +66,7 @@ async def upload_document(rep_input: str):
     except Exception:
         # RabbitMQ 不可用时降级为同步处理
         KnowledgeBaseService().upload_by_str(content, filename, user_id=user_id)
-        BM25Service().build_index(vector_store_service.get_all_documents())
+        bm25_service.build_index(vector_store_service.get_all_documents())
         return f"文档 {filename} 已同步入库（消息队列不可用，降级处理）"
 
     return f"文档{filename}已提交异步处理，任务 ID：{task_id}"

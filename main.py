@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.services import vector_store
 from app.services.vector_store import VectorStoreService
-from app.services.bm25_service import BM25Service
+from app.services.bm25_service import bm25_service
 from app.utils.SQL_database import engine, Base
 from app.utils.rabbitmq import rabbitmq
 from app.config.settings import get_settings, BASE_DIR
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
             Document(page_content=text, metadata=meta)
             for text, meta in zip(all_docs["documents"], all_docs["metadatas"])
         ]
-    BM25Service().build_index(all_docs)
+    bm25_service.build_index(all_docs)
     Base.metadata.create_all(bind=engine)
     logger.info("BM25 索引构建完成，文档数: %d", len(all_docs))
 

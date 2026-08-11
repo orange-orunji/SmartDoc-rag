@@ -110,7 +110,8 @@ sequenceDiagram
 - **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯
 - **多用户认证与隔离**：JWT 认证 + HTTP Bearer Token，用户数据完全物理隔离
 - **会话管理**：新建、切换、重命名、删除会话，每个会话独立保持上下文
-- **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本，支持多种检索策略对比
+- **查询意图路由器**：三层漏斗路由（正则精确标记 → 语料 IDF 稀有词信号 → 默认语义），模糊查询 99.33% 准确分流，避免 BM25 噪声拖累语义场景
+- **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本与 300 条分类评测集（semantic/keyword 各 150），支持多种检索策略对比与路由阈值校准
 - **纯 HTML 单页前端**：零依赖浏览器端渲染，由 FastAPI 内置托管，无需前端框架或额外进程
 
 ## 📊 检索策略对比（Top-1 召回率）
@@ -123,6 +124,15 @@ sequenceDiagram
 | HyDE + BM25 + Rerank | 50.00% | 39.53% |
 
 > ⚡ 核心发现：HyDE+Rerank 在语义模糊场景下提升最显著。详细实验分析见 [`EVALUATION.md`](./EVALUATION.md)。
+
+### 🧭 查询意图路由校准（300 条评测集）
+
+| 分组 | 路由判定正确率 | 说明 |
+|------|--------------|------|
+| 模糊组（150 条） | **99.33%** | 仅 1 条引号强调句被正则误伤 |
+| 精确组（150 条） | 60.67% | 正则层覆盖全部含英文/引号题；纯中文精确题待后续检索效果验证 |
+
+> 💡 路由器校准脚本 `app/eval_router.py`，评测集 `app/eval_questions.json`（type 标注 semantic/keyword）。分类正确率只是代理指标，最终收益以 Recall@K 对比为准。
 
 ## 📂 项目结构
 
@@ -164,7 +174,9 @@ RAG_Personal/
 │   │   ├── chat_history/             # 对话历史文件
 │   │   └── report/                   # 生成的报告文件
 │   ├── static/index.html            # HTML 前端
-│   ├── eval_retrieval.py            # 检索评测
+│   ├── eval_retrieval.py            # 检索评测（Recall@K / MRR）
+│   ├── eval_router.py               # 路由器意图判定校准
+│   ├── eval_questions.json          # 300 条分类评测集
 │   └── worker.py                    # 独立 Worker（可选）
 ├── models/bge-reranker-base/        # Reranker 模型
 ├── requirements.txt
@@ -288,6 +300,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.8.0-alpha** | 2026-08-04 | 检索策略自适应一期：BM25 服务单例化（修复索引空转 bug）+ 查询意图路由器（正则 + IDF 三层漏斗）+ 评测集扩至 300 条并支持 type 分组 + 路由校准脚本 |
 | **1.7.0** | 2026-07-17 | 工程化加固：Agent 上传走消息队列、语义缓存 LRU 限制、BM25 防抖重建、CORS 拆分、空壳清理、检索全链路耗时日志、API 响应 Schema 补全 |
 | **1.6.0** | 2026-07-15 | 智能办公助手：报告生成 + 格式转换 + 邮件发送 + 附件支持 |
 | **1.5.0** | 2026-07-14 | Agent 升级：Function Calling 工具封装 + AgentExecutor 串联 + 多轮会话记忆 + DeepSeek 模型切换 |
@@ -315,16 +328,20 @@ docker compose up -d --build
 
 > 现状：`search_knowledge_base` 固定走 HyDE + 向量 + BM25 + Rerank 全流程，但评测证明模糊语义场景下 BM25 反而拉低召回（Recall@1 53.3% → 50.0%，详见 EVALUATION.md）——根因是小语料 IDF 统计不可靠，且未区分查询类型。
 
-**改造清单**：
+**改造清单**（✅ 已完成 / ⏳ 进行中）：
 
-| # | 文件 | 改造内容 |
-|---|------|---------|
-| 1 | `app/services/query_router.py`（新增） | 查询意图路由器：规则分类（显式精确标记《》/引号、英文术语/数字版本号），可选进阶信号：利用语料 IDF 稀有词检测；输出 `semantic` / `keyword` |
-| 2 | `app/services/hyde.py` | 新增 `adaptive_retrieve` 路由入口：semantic → HyDE+Rerank 单路；keyword → 双路融合 + Rerank；新增 RRF（倒数排名融合）替代现有简单拼接去重 |
-| 3 | `app/services/tools/search_tool.py` | 检索接入点从 `hyde_plus_rerank_bm25_retrieve` 切换为 `adaptive_retrieve` |
-| 4 | `app/services/llm.py` | RAG 备选链同步切换，双路径质量对齐 |
-| 5 | `app/eval_retrieval.py` | 新增 `RouterStrategy` 评测策略，复跑 43 条评测集 |
-| 6 | `EVALUATION.md` + README | 更新策略对比表与亮点描述 |
+| # | 文件 | 改造内容 | 状态 |
+|---|------|---------|------|
+| 0 | `app/services/bm25_service.py` + 5 处调用点 | BM25 单例化：模块级 `bm25_service` 统一索引，修复原先每次 new 实例导致索引空转的 bug | ✅ |
+| 1 | `app/services/tools/query_router.py`（新增） | 查询意图路由器三层漏斗：正则精确标记（《》/引号/英文/版本号）→ 语料 IDF 稀有词信号 → 默认 semantic | ✅ |
+| 1.5 | `app/eval_questions.json` + `app/eval_router.py`（新增） | 评测集扩至 300 条（semantic/keyword 各 150，type 字段标注）；路由校准脚本输出逐条 max_IDF 分布 | ✅ |
+| 2 | `app/services/hyde.py` | 新增 `adaptive_retrieve` 路由入口：semantic → HyDE+Rerank 单路；keyword → 双路融合 + Rerank；新增 RRF（倒数排名融合）替代现有简单拼接去重 | ⏳ |
+| 3 | `app/services/tools/search_tool.py` | 检索接入点从 `hyde_plus_rerank_bm25_retrieve` 切换为 `adaptive_retrieve` | ⏳ |
+| 4 | `app/services/llm.py` | RAG 备选链同步切换，双路径质量对齐 | ⏳ |
+| 5 | `app/eval_retrieval.py` | 新增 `RouterStrategy` 评测策略，全量 300 条复跑对比 | ⏳ |
+| 6 | `EVALUATION.md` + README | 更新策略对比表与亮点描述（路由校准结果已记录至 EVALUATION.md） | 部分 |
+
+**一期校准结论**（300 条，见 EVALUATION.md）：模糊组路由正确率 99.33%，路由器核心价值——保护模糊查询不再进 BM25 链路被噪声拖累；精确组 60.67%，误判集中在纯中文精确题，但当前语料仅 45 切片，IDF 上界约 3.39（阈值 4.0 不可达，第二层暂由正则层兜底），小语料下 IDF 层的局限本身即为有价值的实验结论。
 
 **验收指标**：纯模糊组持平 66.67%（路由至 HyDE+Rerank 最优策略）；混合组超越 48.84%（精确题不再被 BM25 噪声拖累）。
 

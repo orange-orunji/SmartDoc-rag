@@ -1,8 +1,12 @@
 import os
 import json
 from app.services.vector_store import vector_store_service as vs
+from app.services.bm25_service import bm25_service
 from app.services.hyde import hyde_plus_rerank_retrieve, hyde_retrieve,hyde_plus_rerank_bm25_retrieve
 from app.services.rerank import rerank
+
+# 独立运行本脚本时手动构建 BM25 索引（服务运行时由 main.py lifespan 构建）
+bm25_service.build_index(vs.get_all_documents())
 
 # 评估指标函数
 def recall_at_k(docs, keywords, k=3):
