@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 from app.services.bm25_service import bm25_service
 from app.services.rerank import rerank
 from app.config.settings import get_settings
+from app.services.tools.query_router import query_router
 from app.services.vector_store import VectorStoreService
 
 logger = logging.getLogger("rag.retrieval")
@@ -54,15 +55,21 @@ def hyde_plus_rerank_bm25_retrieve(question : str, k_vector: int = 15, k_keyword
     search = service.search(question, top_k=k_keyword)
     logger.info("BM25 关键词检索 | 耗时=%.2fs | 召回=%d", time.time() - t0, len(search))
 
-    # 3. 合并去重
+    # 3. RRF 倒数排名融合（替代旧的暴力拼接去重）
+    # 分数 = Σ 1/(k + rank)，k=60；只看排名不看原始分数，免归一化
     t0 = time.time()
-    contains = {}
-    for doc in vector + search:
-        if doc.page_content not in contains:
-            contains[doc.page_content] = doc
-    unique_docs = list(contains.values())
-    logger.info("合并去重 | 耗时=%.2fs | 合并前=%d | 去重后=%d",
-                time.time() - t0, len(vector) + len(search), len(unique_docs))
+    RRF_K = 60
+    fused = {}  # {page_content: [累计 RRF 分数, doc 对象]}
+    for rank, doc in enumerate(vector, start=1):
+        item = fused.setdefault(doc.page_content, [0.0, doc])
+        item[0] += 1 / (RRF_K + rank)
+    for rank, doc in enumerate(search, start=1):
+        item = fused.setdefault(doc.page_content, [0.0, doc])
+        item[0] += 1 / (RRF_K + rank)  # 双路都召回 → 累加，共识文档排名提升
+    unique_docs = [doc for _, doc in sorted(fused.values(), key=lambda x: x[0], reverse=True)]
+    logger.info("RRF 融合 | 耗时=%.2fs | 合并前=%d | 去重后=%d | 双路共识=%d",
+                time.time() - t0, len(vector) + len(search), len(unique_docs),
+                len(vector) + len(search) - len(unique_docs))
 
     # 4. Rerank 重排序
     t0 = time.time()
@@ -71,9 +78,24 @@ def hyde_plus_rerank_bm25_retrieve(question : str, k_vector: int = 15, k_keyword
                 time.time() - t0, len(result), time.time() - t_start)
 
     return result
+
+def adaptive_retrieve(question: str, k: int = 3):
+    router = query_router(question)
+    if router == "semantic":
+        return hyde_plus_rerank_retrieve(question, k)
+    # 注意：hyde_plus_rerank_bm25_retrieve 的位置参数是 k_vector，最终数量要用 final_k 传
+    return hyde_plus_rerank_bm25_retrieve(question, final_k=k)
+
+
 if __name__ == "__main__":
-    q = "java相关资料？"
-    docs = hyde_plus_rerank_retrieve(q)
+    # 直接运行时需手动配置日志级别（默认 WARNING 会吞掉 info）
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(name)s | %(message)s")
+    # 服务运行时由 main.py lifespan 构建索引；直接跑需手动建，否则 BM25 路为空
+    service.build_index(_vs.get_all_documents())
+
+    q = "Redis 默认持久化方式"
+    docs = adaptive_retrieve(q)
     print("检索到的文档片段：")
     for doc in docs:
         print(doc.page_content[:200])
+        print("---")
