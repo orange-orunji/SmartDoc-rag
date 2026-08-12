@@ -43,6 +43,7 @@ class KnowledgeBaseService:
 
         self.chroma = Chroma(
             embedding_function=DashScopeEmbeddings(
+                model="text-embedding-v4",
                 dashscope_api_key=os.getenv("DASHSCOPE_API_KEY")
             ),
             persist_directory=self.s.CHROMA_DIR,

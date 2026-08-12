@@ -11,6 +11,7 @@ class SemanticCache:
         self.threshold = similarity_threshold
         self.max_size = max_size
         self._embedding = DashScopeEmbeddings(
+            model="text-embedding-v4",
             dashscope_api_key=os.getenv("DASHSCOPE_API_KEY")
         )
         self._question_vecs: list[np.ndarray] = []

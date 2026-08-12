@@ -33,7 +33,9 @@ class BM25Service:
         if not self.bm25:
             return []
         # 获取当前问题的切片
-        query_cut_list = [jieba.cut(query)]
+        # 注意：必须传 list，不能传 [生成器]——get_scores 逐词查词频，
+        # 生成器对象本身不是词，会导致全部文档得 0 分，排序退化为索引顺序
+        query_cut_list = list(jieba.cut(query))
         # 投喂给bm25模型打分
         scores = self.bm25.get_scores(query_cut_list)
         # 按分数排序，取 top_k 的下标
