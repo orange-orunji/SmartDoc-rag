@@ -1,14 +1,17 @@
+from langchain_core.documents import Document
 from langchain_core.tools import tool
+from typing import List
 
-from app.services.hyde import hyde_plus_rerank_bm25_retrieve
+from app.services.hyde import adaptive_retrieve
 import logging
 
 
 @tool
-def search_knowledge_base(query: str) -> str:
+def search_knowledge_base(query: str) -> List[Document]:
     """在企业知识库中搜索文档内容。
 
-    内部流程：自动完成 HyDE 语义扩展 → 向量检索 + BM25 关键词检索 → 去重 → Rerank 重排序。
+    内部流程：查询意图路由 → 模糊语义问题走 HyDE 单路（HyDE 语义扩展 + 向量检索），
+    精确关键词问题走向量检索 + BM25 双路 RRF 融合，最后 Rerank 重排序。
     返回：top-3 最相关文档片段。
 
     ✅ 必须调用的情况：
@@ -24,5 +27,5 @@ def search_knowledge_base(query: str) -> str:
     logger = logging.getLogger("rag.tools")
     logger.info("Agent 调用了 search_knowledge_base | query=%s", query)
 
-    # 复用假想文本生成（已包含 HyDE + 向量 + BM25 + Rerank 全流程）
-    return hyde_plus_rerank_bm25_retrieve(query)
+    #  意图路由 → semantic 走 HyDE 单路 / keyword 走双路 RRF 融合
+    return adaptive_retrieve(query)

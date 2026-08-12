@@ -9,7 +9,7 @@ from app.config.settings import get_settings
 from openai import AsyncOpenAI,APIError
 
 from collections.abc import AsyncIterator
-from app.services.hyde import hyde_plus_rerank_retrieve
+from app.services.hyde import adaptive_retrieve
 from app.services.history_service import get_file_chat_history
 
 
@@ -53,7 +53,7 @@ def get_rag_chain(user_id: str):
         streaming=True,
         callbacks=[]
     )
-    retrieve = RunnableLambda(lambda q  : hyde_plus_rerank_retrieve(question=q, k=25))
+    retrieve = RunnableLambda(lambda q  : adaptive_retrieve(question=q, k=25))
 
     prompt = ChatPromptTemplate.from_messages(
             messages=[
