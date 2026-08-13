@@ -13,6 +13,9 @@ from app.utils.rabbitmq import rabbitmq
 from app.utils.redis_client import get_redis
 from app.utils.task_status import TaskTracker, TaskStatus
 
+# 模块内复用单例：避免每次新建 Chroma 连接（worker 侧各自持有自己的实例，互不干扰）
+_kb_service = KnowledgeBaseService()
+
 
 @tool
 async def upload_document(rep_input: str):
@@ -65,7 +68,7 @@ async def upload_document(rep_input: str):
         })
     except Exception:
         # RabbitMQ 不可用时降级为同步处理
-        KnowledgeBaseService().upload_by_str(content, filename, user_id=user_id)
+        _kb_service.upload_by_str(content, filename, user_id=user_id)
         bm25_service.build_index(vector_store_service.get_all_documents())
         return f"文档 {filename} 已同步入库（消息队列不可用，降级处理）"
 

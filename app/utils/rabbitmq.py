@@ -14,6 +14,7 @@ class RabbitMQClient:
         self._connection: aio_pika.RobustConnection | None = None
         self._channel: aio_pika.RobustChannel | None = None
         self._exchange: aio_pika.RobustExchange | None = None
+        self._dlx: aio_pika.RobustExchange | None = None
 
     async def connect(self):
         s = get_settings()
@@ -28,6 +29,15 @@ class RabbitMQClient:
         self._exchange = await self._channel.declare_exchange(
             "document.tasks", aio_pika.ExchangeType.TOPIC, durable=True
         )
+        # 死信交换机必须先声明：队列的 x-dead-letter-exchange 指向它，
+        # 若不存在，重试耗尽的消息被死信时会因交换机缺失被静默丢弃
+        self._dlx = await self._channel.declare_exchange(
+            "document.tasks.dlx", aio_pika.ExchangeType.TOPIC, durable=True
+        )
+        dead_queue = await self._channel.declare_queue(
+            "document.failed.queue", durable=True
+        )
+        await dead_queue.bind(self._dlx, routing_key="document.failed")
 
     async def publish(self, routing_key: str, message: dict):
         if not self._exchange:
