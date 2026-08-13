@@ -47,6 +47,9 @@ async def lifespan(app: FastAPI):
     mq_connected = False
 
     # ── RabbitMQ 连接（可选：开发环境不可用时不阻塞启动）──
+    # 注意：若首次连接失败，异步上传将禁用且不会自动恢复——aio_pika 底层连接
+    # 会自动重连，但 consume() 消费者任务不会补启动，需重启服务才能启用。
+    # 运维顺序：先启动 RabbitMQ / Redis，再启动后端。
     try:
         await rabbitmq.connect()
         mq_connected = True

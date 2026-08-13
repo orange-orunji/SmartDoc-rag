@@ -110,7 +110,7 @@ sequenceDiagram
 - **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯
 - **多用户认证与隔离**：JWT 认证 + HTTP Bearer Token，用户数据完全物理隔离
 - **会话管理**：新建、切换、重命名、删除会话，每个会话独立保持上下文
-- **查询意图路由器**：三层漏斗路由（正则精确标记 → 语料 IDF 稀有词信号 → 默认语义），模糊查询 99.33% 准确分流，避免 BM25 噪声拖累语义场景
+- **查询意图路由器**：三层漏斗路由（正则精确标记 → 语料 IDF 稀有词信号 → 默认语义），300 题评测下语义组 75.3% / 精确组 86.0% 正确分流，检索层 Recall@1 59.67% 反超全量混合基线 2pp
 - **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本与 300 条分类评测集（semantic/keyword 各 150），支持多种检索策略对比与路由阈值校准
 - **纯 HTML 单页前端**：零依赖浏览器端渲染，由 FastAPI 内置托管，无需前端框架或额外进程
 
@@ -125,14 +125,14 @@ sequenceDiagram
 
 > ⚡ 核心发现：HyDE+Rerank 在语义模糊场景下提升最显著。详细实验分析见 [`EVALUATION.md`](./EVALUATION.md)。
 
-### 🧭 查询意图路由校准（300 条评测集）
+### 🧭 查询意图路由校准（300 条评测集，38 切片语料）
 
 | 分组 | 路由判定正确率 | 说明 |
 |------|--------------|------|
-| 模糊组（150 条） | **99.33%** | 仅 1 条引号强调句被正则误伤 |
-| 精确组（150 条） | 60.67% | 正则层覆盖全部含英文/引号题；纯中文精确题待后续检索效果验证 |
+| 语义组（150 条） | 75.3% | CN_FACT_PATTERN 句式层将部分“为什么”句引入精确通道（双路为单路超集，检索层实测无损失） |
+| 精确组（150 条） | 86.0% | 中文精确句式模板上线后大涨（60.67% → 86.00%） |
 
-> 💡 路由器校准脚本 `app/eval_router.py`，评测集 `app/eval_questions.json`（type 标注 semantic/keyword）。分类正确率只是代理指标，最终收益以 Recall@K 对比为准。
+> 💡 路由器校准脚本 `app/eval_router.py`，评测集 `app/eval_questions.json`（type 标注 semantic/keyword）。分类正确率只是代理指标，最终收益以 Recall@K 对比为准——38 切片实测 adaptive 59.67% vs 全量混合 57.67%，详见 [`EVALUATION.md`](./EVALUATION.md) 实验三。
 
 ## 📂 项目结构
 
@@ -246,6 +246,8 @@ redis-server
 
 ### 5. 运行项目
 
+> ⚠️ **启动顺序**：先启动 RabbitMQ 和 Redis，再启动后端（`main.py`）。若首次启动时 RabbitMQ 不可用，异步上传功能会禁用且**不会自动恢复**——需重启后端服务。
+
 ```bash
 # 一键启动（前端 + 后端同一进程，访问 http://127.0.0.1:8000）
 python main.py
@@ -289,6 +291,7 @@ docker compose up -d --build
 | 页面加载不出来 | 确认已执行 `pip install aiofiles`，重启后端 |
 | 重命名会话失败 | 需先发送一条消息创建会话文件，或刷新页面后重试 |
 | RabbitMQ 连接失败 | 检查 vhost 用户权限是否为 `.*`（正则），不能只用 `*` |
+| 上传功能禁用（日志提示） | RabbitMQ 首次连接失败后需**重启后端**才能启用；运维顺序应为先启动 RabbitMQ / Redis，再启动后端 |
 | 文档上传后无响应 | 检查 RabbitMQ 是否运行，Redis 是否可连接（文件内容通过 Redis 传递） |
 | Redis 连接失败 | 缓存功能自动降级，不影响核心问答；启动 Redis 后重启服务即可启用 |
 | 邮件发送失败 | 检查 `.env` 中 SMTP 配置是否正确，QQ 邮箱需使用授权码而非登录密码 |
@@ -300,6 +303,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.8.1** | 2026-08-13 | 检索策略自适应二期：CN_FACT_PATTERN 中文精确句式 + adaptive_retrieve 全量接入（工具/LLM 双入口）+ RRF 融合；38 切片评测 adaptive 59.67% 反超全量混合基线 2pp；Embedding 统一工厂（text-embedding-v4 按量付费回切）；上传链路修复（失败重试不再必失败 + 死信队列声明） |
 | **1.8.0-alpha** | 2026-08-04 | 检索策略自适应一期：BM25 服务单例化（修复索引空转 bug）+ 查询意图路由器（正则 + IDF 三层漏斗）+ 评测集扩至 300 条并支持 type 分组 + 路由校准脚本 |
 | **1.7.0** | 2026-07-17 | 工程化加固：Agent 上传走消息队列、语义缓存 LRU 限制、BM25 防抖重建、CORS 拆分、空壳清理、检索全链路耗时日志、API 响应 Schema 补全 |
 | **1.6.0** | 2026-07-15 | 智能办公助手：报告生成 + 格式转换 + 邮件发送 + 附件支持 |
@@ -335,15 +339,15 @@ docker compose up -d --build
 | 0 | `app/services/bm25_service.py` + 5 处调用点 | BM25 单例化：模块级 `bm25_service` 统一索引，修复原先每次 new 实例导致索引空转的 bug | ✅ |
 | 1 | `app/services/tools/query_router.py`（新增） | 查询意图路由器三层漏斗：正则精确标记（《》/引号/英文/版本号）→ 语料 IDF 稀有词信号 → 默认 semantic | ✅ |
 | 1.5 | `app/eval_questions.json` + `app/eval_router.py`（新增） | 评测集扩至 300 条（semantic/keyword 各 150，type 字段标注）；路由校准脚本输出逐条 max_IDF 分布 | ✅ |
-| 2 | `app/services/hyde.py` | 新增 `adaptive_retrieve` 路由入口：semantic → HyDE+Rerank 单路；keyword → 双路融合 + Rerank；新增 RRF（倒数排名融合）替代现有简单拼接去重 | ⏳ |
-| 3 | `app/services/tools/search_tool.py` | 检索接入点从 `hyde_plus_rerank_bm25_retrieve` 切换为 `adaptive_retrieve` | ⏳ |
-| 4 | `app/services/llm.py` | RAG 备选链同步切换，双路径质量对齐 | ⏳ |
-| 5 | `app/eval_retrieval.py` | 新增 `RouterStrategy` 评测策略，全量 300 条复跑对比 | ⏳ |
-| 6 | `EVALUATION.md` + README | 更新策略对比表与亮点描述（路由校准结果已记录至 EVALUATION.md） | 部分 |
+| 2 | `app/services/hyde.py` | 新增 `adaptive_retrieve` 路由入口：semantic → HyDE+Rerank 单路；keyword → 双路融合 + Rerank；新增 RRF（倒数排名融合）替代现有简单拼接去重 | ✅ |
+| 3 | `app/services/tools/search_tool.py` | 检索接入点从 `hyde_plus_rerank_bm25_retrieve` 切换为 `adaptive_retrieve` | ✅ |
+| 4 | `app/services/llm.py` | RAG 备选链同步切换，双路径质量对齐 | ✅ |
+| 5 | `app/eval_retrieval.py` | 新增 `RouterStrategy` 评测策略，全量 300 条复跑对比 | ✅ |
+| 6 | `EVALUATION.md` + README | 更新策略对比表与亮点描述（路由校准结果已记录至 EVALUATION.md） | ✅ |
 
-**一期校准结论**（300 条，见 EVALUATION.md）：模糊组路由正确率 99.33%，路由器核心价值——保护模糊查询不再进 BM25 链路被噪声拖累；精确组 60.67%，误判集中在纯中文精确题，但当前语料仅 45 切片，IDF 上界约 3.39（阈值 4.0 不可达，第二层暂由正则层兜底），小语料下 IDF 层的局限本身即为有价值的实验结论。
+**二期校准结论**（38 切片，300 条，见 EVALUATION.md 实验三）：语义组分类正确率 75.3%、精确组 86.0%（中文句式上线后 60.67% → 86.00%）；CN_FACT_PATTERN 将精确组丢分从 -7.29pp 收窄至 -2.19pp，检索层 Recall@1 59.67% 反超全量混合基线 2pp，验收通过。
 
-**验收指标**：纯模糊组持平 66.67%（路由至 HyDE+Rerank 最优策略）；混合组超越 48.84%（精确题不再被 BM25 噪声拖累）。
+**验收指标**：38 切片实测 adaptive_retrieve Recall@1 59.67% vs 全量混合 57.67%，反超 2pp；语义两组 +6.67pp/+5.83pp，精确组丢分仅剩 -2.19pp（3 题，均为中文句式变体）。
 
 **远期计划**
 
