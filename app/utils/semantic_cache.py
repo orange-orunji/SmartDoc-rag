@@ -1,7 +1,7 @@
 import os
 import hashlib
 import numpy as np
-from langchain_community.embeddings import DashScopeEmbeddings
+from app.services.embedding_factory import get_embedding
 from app.config.settings import get_settings
 from app.utils.redis_client import get_redis
 
@@ -10,10 +10,7 @@ class SemanticCache:
     def __init__(self, similarity_threshold: float = 0.85, max_size: int = 200):
         self.threshold = similarity_threshold
         self.max_size = max_size
-        self._embedding = DashScopeEmbeddings(
-            model="text-embedding-v4",
-            dashscope_api_key=os.getenv("DASHSCOPE_API_KEY")
-        )
+        self._embedding = get_embedding()
         self._question_vecs: list[np.ndarray] = []
         self._redis_keys: list[str] = []
         self._settings = get_settings()

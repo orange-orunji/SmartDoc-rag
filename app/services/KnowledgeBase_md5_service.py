@@ -2,7 +2,7 @@ import os
 import hashlib
 from datetime import datetime
 
-from langchain_community.embeddings import DashScopeEmbeddings
+from app.services.embedding_factory import get_embedding
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config.settings import get_settings
@@ -42,10 +42,7 @@ class KnowledgeBaseService:
         self.s = get_settings()
 
         self.chroma = Chroma(
-            embedding_function=DashScopeEmbeddings(
-                model="text-embedding-v4",
-                dashscope_api_key=os.getenv("DASHSCOPE_API_KEY")
-            ),
+            embedding_function=get_embedding(),
             persist_directory=self.s.CHROMA_DIR,
             collection_name=self.s.CHROMA_NAME
         )

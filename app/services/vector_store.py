@@ -1,6 +1,4 @@
-import os
-
-from langchain_community.embeddings import DashScopeEmbeddings
+from app.services.embedding_factory import get_embedding
 from langchain_chroma import Chroma
 from langchain_openai import ChatOpenAI
 
@@ -18,10 +16,7 @@ class VectorStoreService:
             callbacks=[]
         )
         # 想用框架自带的HyDe检索,但好像换包了暂时找不到位置先遗弃此方案
-        self.base_embedding = DashScopeEmbeddings(
-            model="text-embedding-v4",
-            dashscope_api_key=os.getenv("DASHSCOPE_API_KEY")
-        )
+        self.base_embedding = get_embedding()
         # self.hyde_retrieve = HypotheticalDocumentEmbedder.from_llm(llm=self.llm,
         #                                                       base_embeddings=self.base_embedding,
         #                                                       prompt=PromptTemplate.from_template(

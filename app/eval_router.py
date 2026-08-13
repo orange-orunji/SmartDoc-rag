@@ -17,7 +17,7 @@ import jieba
 
 from app.services.vector_store import vector_store_service as vs
 from app.services.bm25_service import bm25_service
-from app.services.tools.query_router import query_router, PATTERN, IDF_THRESHOLD
+from app.services.tools.query_router import query_router, PATTERN, CN_FACT_PATTERN, IDF_THRESHOLD
 
 
 def max_idf_of(query: str):
@@ -55,7 +55,7 @@ def main():
         for i, item in enumerate(items, 1):
             q = item["question"]
             # 记录路由器走了哪一层
-            if PATTERN.search(q):
+            if PATTERN.search(q) or CN_FACT_PATTERN.search(q):
                 layer, intent = "正则层", "keyword"
             else:
                 intent = query_router(q)

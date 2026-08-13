@@ -33,6 +33,13 @@ class settings(BaseSettings):
     SILICON_API_KEY: str
     SILICON_BASE_URL: str = "https://api.deepseek.com"
     SILICON_MODEL: str = "deepseek-v4-flash"
+    DASHSCOPE_API_KEY: str = ""
+
+    # ── Embedding 配置（DashScope OpenAI 兼容接口）──
+    # text-embedding-v4 免费额度用完后转按量付费：0.5 元/百万 Token，项目全量用量不到 0.5 元
+    # 注意：更换 EMBEDDING_MODEL 后必须全量重建知识库（python -m app.rebuild_kb）
+    EMBEDDING_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    EMBEDDING_MODEL: str = "text-embedding-v4"
 
     # ── chroma 配置 ──
     CHROMA_DIR: str = str(BASE_DIR / "app/data/storage/chroma_db")

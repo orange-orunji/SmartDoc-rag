@@ -19,7 +19,15 @@ models/
 # 运行时数据
 app/data/storage/
 app/data/chat_history/
+app/data/report/
+app/eval_checkpoint.json
 app.db
+*.db-shm
+*.db-wal
+
+# 临时调试脚本
+_tmp_*
+_*.tmp
 
 # 系统文件
 .DS_Store
