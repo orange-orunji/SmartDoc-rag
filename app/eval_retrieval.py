@@ -147,6 +147,10 @@ evaluate("adaptive_retrieve", adaptive_retrieves, k=1)
 
     HyDE_plus_rerank: Recall@1 = 50.67%, MRR = 0.528
     hyde_plus_rerank_bm25: Recall@1 = 56.67%, MRR = 0.567
-    adaptive_retrieve: Recall@1 = 56.67%, MRR = 0.567
+    adaptive_retrieve: Recall@1 = 56.67%, MRR = 0.567  # 19 切片旧语料
+
+    # 38 切片新语料（同场双策略重跑）：
+    hyde_plus_rerank_bm25: Recall@1 = 57.67%, MRR = 0.577
+    adaptive_retrieve: Recall@1 = 59.67%, MRR = 0.597  # 反超基线 +2pp
 AC3-WQ
 """
