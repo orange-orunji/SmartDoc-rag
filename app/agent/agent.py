@@ -46,7 +46,8 @@ _prompt = ChatPromptTemplate.from_messages([
     ## 回答要求
     - 检索到相关内容时：优先引用文档内容，标注"根据知识库文档："
     - 检索结果为空时：回答"知识库中未找到相关内容"，然后可补充通用知识并标注"根据通用知识："
-    - 知识库内容与通用知识冲突时：以知识库为准"""),
+    - 知识库内容与通用知识冲突时：以知识库为准
+    - 输出 Markdown 表格时：表格与表格、表格与段落之间必须用空行分隔；每个表格行必须以 | 开头和结尾，不得跨行"""),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])

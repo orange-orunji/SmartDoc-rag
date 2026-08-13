@@ -254,6 +254,12 @@
         .btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .typing-indicator { color: var(--text-secondary); font-size: 13px; padding: 4px 16px; }
+        .tool-call-tip {
+            font-size: 12px; color: var(--text-secondary); background: #eef2ff;
+            border: 1px solid #e0e7ff; border-radius: 6px; padding: 4px 10px;
+            margin: 4px 0 8px; font-family: 'Consolas', 'Courier New', monospace;
+            display: inline-block;
+        }
 
         /* Current session badge */
         .current-session-tag {
@@ -267,7 +273,8 @@
             .message { max-width: 90%; }
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- app version: v4 (JSON-SSE + token流式 + normalizeTables v2) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 </head>
 <body>
 
@@ -322,7 +329,7 @@
 
     <!-- Chat Area -->
     <main class="chat-area">
-        <div class="chat-header">📚 智能办公助手 </div>
+        <div class="chat-header">📚 智能办公助手 <span style="font-size:11px;color:var(--text-secondary);font-weight:400;">v4</span></div>
         <div class="current-session-tag" id="current-session-tag"></div>
         <div class="chat-messages" id="chat-messages">
             <div class="empty-state">选择一个会话开始对话，或新建一个会话</div>
@@ -654,12 +661,45 @@ function scrollToBottom() {
     setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
 }
 
+// GFM 表格贪婪吞行：LLM 流式输出常在两块内容间漏空行，marked 会把
+// ① 相邻表格合并；② 表格后的无竖线说明文字吞进表格成为一行；③ 列表项后的表格嵌套进 <li>。
+// 修复：表格状态机——检测到“新表格开始”（表头行 + 下一行分隔行）且前面紧跟内容时补空行；
+// 表格内出现无竖线行（说明文字/新块）时强制结束表格。
+function normalizeTables(text) {
+    const lines = text.split('\n');
+    const sepRe = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/;
+    const headRe = /^\s*\|.*\|/;
+    const out = [];
+    let inTable = false;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const next = (lines[i + 1] || '').trim();
+        if (!inTable) {
+            // 表格开始：当前行是表头候选，下一行是分隔行
+            if (headRe.test(line) && sepRe.test(next)) {
+                const prev = out.length ? out[out.length - 1].trim() : '';
+                if (prev !== '' && !sepRe.test(prev)) {
+                    out.push('');
+                }
+                inTable = true;
+            }
+        } else {
+            // 表格内出现无竖线行（说明文字/新块/空行）→ 表格结束，补空行分隔
+            if (!line.includes('|')) {
+                inTable = false;
+                out.push('');
+            }
+        }
+        out.push(line);
+    }
+    return out.join('\n');
+}
+
 function formatContent(text) {
     if (!text) return '';
-    // 先还原 SSE 转义的 \n
-    let cleaned = text.replace(/\\n/g, '\n');
-    // 用 marked 渲染 Markdown
-    return marked.parse(cleaned);
+    // 后端以 JSON 字符串编码 SSE 帧，这里拿到的是原始文本（含真实换行、字面 \n 无损）
+    // breaks: true —— LLM 常用单个 \n 分段，默认 breaks:false 会把单换行折叠成空格
+    return marked.parse(normalizeTables(text), { breaks: true });
 }
 
 // ═══════════════════════════════════════
@@ -723,8 +763,22 @@ async function sendMessage() {
                 const trimmed = line.trim();
                 if (!trimmed || !trimmed.startsWith('data: ')) continue;
 
-                const data = trimmed.slice(6);
-                if (data === '[DONE]') continue;
+                const raw = trimmed.slice(6);
+                if (raw === '[DONE]') continue;
+
+                // 后端以 JSON 字符串编码帧内容，解码还原原始文本（兼容旧格式）
+                let data;
+                try { data = JSON.parse(raw); } catch { data = raw; }
+
+                // 工具调用提示：渲染为独立提示条，不并入回答文本
+                if (data.startsWith('[调用工具')) {
+                    const tip = document.createElement('div');
+                    tip.className = 'tool-call-tip';
+                    tip.textContent = data;
+                    assistantDiv.insertBefore(tip, bubble);
+                    scrollToBottom();
+                    continue;
+                }
 
                 fullResponse += data;
                 bubble.innerHTML = formatContent(fullResponse);
@@ -736,7 +790,8 @@ async function sendMessage() {
         if (buffer.trim()) {
             const remaining = buffer.trim();
             if (remaining.startsWith('data: ') && remaining.slice(6) !== '[DONE]') {
-                fullResponse += remaining.slice(6);
+                const raw = remaining.slice(6);
+                try { fullResponse += JSON.parse(raw); } catch { fullResponse += raw; }
             }
         }
 

@@ -25,9 +25,15 @@ router = APIRouter()
 s = get_settings()
 
 
-def _sse_escape(text: str) -> str:
-    """将换行符转义，防止破坏 SSE 协议格式"""
-    return text.replace('\n', '\\n')
+def _sse_encode(text: str) -> str:
+    """SSE 帧内容编码：JSON 字符串（含引号、真实换行）无损传输。
+
+    之前用 text.replace('\\n', '\\\\n') 转义，会把真实换行与代码中的
+    字面 \\n 混为一谈——前端还原时代码里的 \\n 字符串会被错误变成换行。
+    JSON 编码语义明确：真实换行编码为 \\n，字面 \\n 编码为 \\\\\\n，
+    前端 JSON.parse 即可无损还原。
+    """
+    return json.dumps(text, ensure_ascii=False)
 """
 流式输出接口
 """
@@ -41,7 +47,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
         cached_answer = semantic_cache.lookup(body.question, user_id)
         if cached_answer:
             async def cache_stream():
-                yield f"data: {_sse_escape(cached_answer)}\n\n"
+                yield f"data: {_sse_encode(cached_answer)}\n\n"
                 yield "data: [DONE]\n\n"
             logger.info("缓存命中 | type=semantic | user=%s | 耗时=%.2fs", user_id, time.time() - t_start)
             return StreamingResponse(cache_stream(), 200, media_type="text/event-stream")
@@ -52,7 +58,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
         redis_chat_history = redis.get(user_key)
         if redis_chat_history:
             async def cache_stream():
-                yield f"data: {_sse_escape(redis_chat_history)}\n\n"
+                yield f"data: {_sse_encode(redis_chat_history)}\n\n"
                 yield "data: [DONE]\n\n"
             logger.info("缓存命中 | type=md5 | user=%s | 耗时=%.2fs", user_id, time.time() - t_start)
             return StreamingResponse(cache_stream(), 200, media_type="text/event-stream")
@@ -74,38 +80,49 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                     lines.append(f"- {role}: {m.content}")
                 history_text = "\n".join(lines) + "\n\n## 当前问题\n"
 
-            async for chunk in chain.astream(
+            async for event in chain.astream_events(
                 {"input": history_text + body.question},
+                version="v1",
             ):
-                if "actions" in chunk:
-                    for action in chunk["actions"]:
-                        tool_name = action.tool
-                        tool_input = str(action.tool_input)[:80]
-                        hint = f"[调用工具: {tool_name} | 输入: {tool_input}]"
-                        yield f"data: {_sse_escape(hint)}\n\n"
-                elif "steps" in chunk:
-                    for step in chunk["steps"]:
-                        observation = step.observation
-                        if observation:
-                            # 检测报告生成 → 推送下载链接（直接推 HTML，marked 会原样渲染）
-                            if "[REPORT_FILE]" in observation:
-                                filename = observation.split("[REPORT_FILE]")[1].split("\n")[0]
-                                dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
-                                all_request += dl_html  # 持久化到历史
-                                yield f"data: {dl_html}\n\n"
-                            logger.info("Tool result length: %d", len(observation))
-                elif "output" in chunk:
-                    text = chunk["output"]
-                    if text is None  or len(text) == 0:
+                e = event["event"]
+                if e == "on_tool_start":
+                    # 工具调用提示（Agent 推理轮输出的 tool_calls 在这里触发）
+                    tool_name = event.get("name", "?")
+                    tool_input = str(event["data"].get("input", ""))[:80]
+                    hint = f"[调用工具: {tool_name} | 输入: {tool_input}]"
+                    yield f"data: {_sse_encode(hint)}\n\n"
+                elif e == "on_chat_model_stream":
+                    # token 级文本流：中间轮 function calling 的 content 为空会被跳过，
+                    # 只有最终回答的文本会流出 → 打字机效果
+                    chunk = event["data"]["chunk"]
+                    content = chunk.content
+                    if isinstance(content, str):
+                        text = content
+                    elif isinstance(content, list):
+                        text = "".join(
+                            part.get("text", "") for part in content
+                            if isinstance(part, dict) and part.get("type") == "text"
+                        )
+                    else:
+                        text = ""
+                    if not text:
                         continue
                     all_request += text
-                    yield f"data: {_sse_escape(text)}\n\n"
+                    yield f"data: {_sse_encode(text)}\n\n"
+                elif e == "on_tool_end":
+                    # 检测报告生成 → 推送下载链接（直接推 HTML，marked 会原样渲染）
+                    output = event["data"].get("output")
+                    if output and "[REPORT_FILE]" in str(output):
+                        filename = str(output).split("[REPORT_FILE]")[1].split("\n")[0]
+                        dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
+                        all_request += dl_html  # 持久化到历史
+                        yield f"data: {_sse_encode(dl_html)}\n\n"
         except Exception as e:
             logger.exception("流式对话异常 | user_id=%s", user_id)
             if s.is_production:
-                yield f"data: {_sse_escape('【系统错误】服务暂时不可用，请稍后重试')}\n\n"
+                yield f"data: {_sse_encode('【系统错误】服务暂时不可用，请稍后重试')}\n\n"
             else:
-                yield f"data: 【系统错误】{_sse_escape(str(e))}\n\n"
+                yield f"data: {_sse_encode('【系统错误】' + str(e))}\n\n"
         finally:
             if all_request and redis:
                 question_hash = hashlib.md5(body.question.encode()).hexdigest()
