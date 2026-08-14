@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -5,7 +7,8 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
 
-SECRET_ID = "my_secret_key_for_demo" # 加密前缀
+# JWT 密钥优先从环境变量读取，未配置时回退到默认值（保证已有 Token 兼容）
+SECRET_ID = os.getenv("JWT_SECRET", "my_secret_key_for_demo") # 加密前缀
 ALGORITHM = "HS256" # 加密方式
 ACCESS_TOKEN_EXPIRE_MINUTES = 60*24*7 # JWT令牌存在时间
 # 生成加密上下文文本对象
