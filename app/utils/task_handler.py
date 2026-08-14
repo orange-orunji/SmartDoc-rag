@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import sys
 from pathlib import Path
 
 from app.config.settings import get_settings
@@ -10,15 +9,11 @@ from app.services.bm25_service import bm25_service
 from app.utils.redis_client import get_redis
 from app.utils.task_status import TaskTracker, TaskStatus
 from app.services.vector_store import vector_store_service as vs_svc
+from app.utils.logging_config import setup_logging
 
 
 cfg = get_settings()
-logging.basicConfig(
-    level=getattr(logging, cfg.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+setup_logging()  # 幂等：主进程已初始化时直接复用
 logger = logging.getLogger("rag.worker")
 
 # 复用单例：每次 new 都会重新初始化 Chroma 连接，高频上传时开销大

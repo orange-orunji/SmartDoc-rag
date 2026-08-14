@@ -20,6 +20,7 @@ models/
 app/data/storage/
 app/data/chat_history/
 app/data/report/
+app/data/logs/
 app/eval_checkpoint.json
 app.db
 *.db-shm

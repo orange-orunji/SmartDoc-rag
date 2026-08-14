@@ -1,6 +1,6 @@
 import logging
 import os
-import sys
+import time
 from contextlib import asynccontextmanager
 import asyncio
 
@@ -20,19 +20,12 @@ from app.services.bm25_service import bm25_service
 from app.utils.SQL_database import engine, Base
 from app.utils.rabbitmq import rabbitmq
 from app.config.settings import get_settings, BASE_DIR
+from app.utils.logging_config import setup_logging
 from app.utils.task_handler import handle_document_upload
 
-# ── 日志系统初始化 ──
+# ── 日志系统初始化（控制台 + 按天轮转文件，见 app/utils/logging_config.py）──
 cfg = get_settings()
-
-logging.basicConfig(
-    level=getattr(logging, cfg.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+setup_logging()
 logger = logging.getLogger("rag")
 
 
@@ -103,6 +96,20 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """请求日志：方法/路径/状态码/耗时（静态资源跳过，避免刷屏）"""
+    if request.url.path.startswith(("/static", "/reports")):
+        return await call_next(request)
+    t0 = time.time()
+    response = await call_next(request)
+    logger.info(
+        "HTTP | method=%s | path=%s | status=%d | 耗时=%.3fs",
+        request.method, request.url.path, response.status_code, time.time() - t0,
+    )
+    return response
 
 app.include_router(chat_router, prefix="/api/chat", tags=["对话接口"])
 app.include_router(document_router, prefix="/api/document", tags=["上传文件接口"])

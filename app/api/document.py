@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
@@ -8,6 +9,7 @@ from app.utils.rabbitmq import rabbitmq
 from app.utils.redis_client import get_redis
 from app.utils.task_status import TaskTracker, TaskStatus
 
+logger = logging.getLogger("rag.upload")
 router = APIRouter()
 
 
@@ -40,6 +42,9 @@ async def document_upload(file: UploadFile = File(..., description="待上传的
         "filename": file.filename,
         "user_id": current_user["user_id"],
     })
+
+    logger.info("接收上传 | task_id=%s | filename=%s | 大小=%dKB | user=%s",
+                task_id, file.filename, len(content) // 1024, current_user["user_id"])
 
     return UnifiedResponse.success(
         code=202,

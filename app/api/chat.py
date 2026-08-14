@@ -66,7 +66,10 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
     async def event_stream():
         t_start = time.time()
         all_request = ""
+        frame_count = 0          # 输出的文本帧数（近似 token 数）
+        tool_times: dict[str, float] = {}  # 工具名 → 开始时间，用于统计耗时
         chat_history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
+        logger.info("收到提问 | user=%s | session=%s | 问题=%s", user_id, body.session_id, body.question[:50])
         try:
             # chain = get_rag_chain(user_id)
             current_user_ctx.set(user_id)
@@ -89,6 +92,8 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                     # 工具调用提示（Agent 推理轮输出的 tool_calls 在这里触发）
                     tool_name = event.get("name", "?")
                     tool_input = str(event["data"].get("input", ""))[:80]
+                    tool_times[tool_name] = time.time()
+                    logger.info("工具调用开始 | tool=%s | 输入=%s", tool_name, tool_input)
                     hint = f"[调用工具: {tool_name} | 输入: {tool_input}]"
                     yield f"data: {_sse_encode(hint)}\n\n"
                 elif e == "on_chat_model_stream":
@@ -108,10 +113,14 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                     if not text:
                         continue
                     all_request += text
+                    frame_count += 1
                     yield f"data: {_sse_encode(text)}\n\n"
                 elif e == "on_tool_end":
                     # 检测报告生成 → 推送下载链接（直接推 HTML，marked 会原样渲染）
+                    tool_name = event.get("name", "?")
+                    cost = time.time() - tool_times.get(tool_name, t_start)
                     output = event["data"].get("output")
+                    logger.info("工具调用结束 | tool=%s | 耗时=%.2fs", tool_name, cost)
                     if output and "[REPORT_FILE]" in str(output):
                         filename = str(output).split("[REPORT_FILE]")[1].split("\n")[0]
                         dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
@@ -132,7 +141,8 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             history = chat_history
             history.add_message(HumanMessage(content=body.question))
             history.add_message(AIMessage(content=all_request))
-            logger.info("对话完成 | user=%s | 耗时=%.2fs | 回复长度=%d", user_id, time.time() - t_start, len(all_request))
+            logger.info("对话完成 | user=%s | 耗时=%.2fs | 输出帧=%d | 回复长度=%d | 工具调用=%d",
+                        user_id, time.time() - t_start, frame_count, len(all_request), len(tool_times))
             yield "data: [DONE]\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

@@ -1,21 +1,16 @@
 import asyncio
 import logging
-import sys
 
 from app.utils.rabbitmq import rabbitmq
 from app.utils.task_handler import handle_document_upload
 from app.config.settings import get_settings
+from app.utils.logging_config import setup_logging
 
 from pathlib import Path
 
-# ── 独立 Worker 日志配置 ──
+# ── 独立 Worker 日志配置（与主进程共用统一配置）──
 cfg = get_settings()
-logging.basicConfig(
-    level=getattr(logging, cfg.LOG_LEVEL),
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+setup_logging()
 logger = logging.getLogger("rag.worker")
 
 IDEMPOTENT_PREFIX = "task:processed:"  # 幂等键前缀
