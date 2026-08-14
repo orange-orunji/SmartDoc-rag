@@ -10,6 +10,7 @@
 - [技术架构](#-技术架构)
 - [核心亮点](#-核心亮点)
 - [检索策略对比](#-检索策略对比)
+- [性能压测](#-性能压测)
 - [项目结构](#-项目结构)
 - [快速开始](#-快速开始)
 - [Docker 一键部署](#-docker-一键部署)
@@ -134,6 +135,21 @@ sequenceDiagram
 
 > 💡 路由器校准脚本 `app/eval_router.py`，评测集 `app/eval_questions.json`（type 标注 semantic/keyword）。分类正确率只是代理指标，最终收益以 Recall@K 对比为准——38 切片实测 adaptive 59.67% vs 全量混合 57.67%，详见 [`EVALUATION.md`](./EVALUATION.md) 实验三。
 
+## ⚡ 性能压测（2026-08-14 实测）
+
+> 环境：Windows 11 + Python 3.14 单进程，限流关闭（压测需绕过 10/min 限流），无 Redis 缓存；httpx 异步并发脚本实测。
+
+| 场景 | 并发 | 请求数 | 吞吐 | 均值 | P95 | P99 |
+|------|------|--------|------|------|-----|-----|
+| GET /health | 100 | 300 | **884 req/s** | 94ms | 125ms | 135ms |
+| POST /api/auth/login（含 JWT 生成 + 密码校验） | 50 | 100 | **233 req/s** | 181ms | 261ms | 272ms |
+| 对话端到端（检索 + 双 LLM 调用，无缓存） | 3 | 3 | 并行 18.8s | **14.5s** | 18.8s | 18.8s |
+
+**关键结论**：
+- API 层（FastAPI 异步）吞吐充足，瓶颈远未到框架层
+- 对话延迟主要来自 LLM 流式生成（每问 2 次模型调用：Agent 推理 + 最终回答），3 并发无劣化
+- 缓存命中场景（Redis + 语义缓存）可将对话延迟从 ~14.5s 降至 ~0.01s（见「双层热点缓存」）
+
 ## 📂 项目结构
 
 ```
@@ -163,6 +179,7 @@ RAG_Personal/
 │   ├── config/settings.py           # 环境配置
 │   ├── utils/                       # 工具模块
 │   │   ├── auth.py                  # JWT + 密码哈希
+│   │   ├── logging_config.py        # 统一日志配置（控制台 + 文件轮转）
 │   │   ├── SQL_database.py          # SQLite 连接
 │   │   ├── task_handler.py            # 公共文档处理 + BM25 防抖重建
 │   │   ├── redis_client.py          # Redis 客户端
@@ -303,6 +320,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.8.3** | 2026-08-14 | 统一日志（`logging_config.py` 文件轮转 + HTTP 请求中间件 + 工具调用/输出帧埋点）；压测量化（/health 884 req/s、登录 233 req/s、端到端 14.5s）；多轮对话 Agent 路径实测验证；安全加固（.env 解除 git 跟踪、JWT 密钥环境变量化） |
 | **1.8.2** | 2026-08-13 | 流式输出修复：`astream_events` token 级流式（帧数 2→524）+ SSE JSON 编码（修复代码块 `\n` 误还原）+ 前端 normalizeTables v2（相邻表格/说明文字吞并）+ 工具提示独立渲染 + Prompt 表格规范 |
 | **1.8.1** | 2026-08-13 | 检索策略自适应二期：CN_FACT_PATTERN 中文精确句式 + adaptive_retrieve 全量接入（工具/LLM 双入口）+ RRF 融合；38 切片评测 adaptive 59.67% 反超全量混合基线 2pp；Embedding 统一工厂（text-embedding-v4 按量付费回切）；上传链路修复（失败重试不再必失败 + 死信队列声明） |
 | **1.8.0-alpha** | 2026-08-04 | 检索策略自适应一期：BM25 服务单例化（修复索引空转 bug）+ 查询意图路由器（正则 + IDF 三层漏斗）+ 评测集扩至 300 条并支持 type 分组 + 路由校准脚本 |
