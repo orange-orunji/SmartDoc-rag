@@ -25,7 +25,7 @@ graph.add_edge("my_node", END)
 
 graph_builder = graph.compile()
 
-# 不太懂还
+# 不太懂还，依旧阿
 if __name__ == "__main__":
     result = graph_builder.invoke({"messages": [], "extra_field": 0})
     print("最终 state:", result)
