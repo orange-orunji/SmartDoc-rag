@@ -346,6 +346,7 @@ docker compose up -d --build
 | 一期 | 用 Checkpointer 接管多轮记忆（thread_id 按用户+会话隔离），与现有 JSON 历史文件双写过渡 | 告别手工拼接历史文本，多轮状态自动持久化 |
 | 二期 | 自定义 StateGraph：将"必须先检索知识库"从 Prompt 规则升级为图结构硬约束（入口强制经过检索节点） | 检索流程由代码保证而非模型自觉，Prompt 大幅精简 |
 | 二期 | 敏感操作人机协同：`send_email` 等工具执行前 interrupt 中断，等待用户确认后恢复执行 | 避免误发邮件，Agent 行为更可控 |
+| 二期 | 联网搜索 `web_search`：知识库检索为空且涉及时效性问题时兜底调用，条件边硬约束控制触发时机；回答标注"根据网络搜索：<来源URL>" | 时效性问题可回答；多源答案三级标注体系（知识库/网络/通用知识） |
 
 **近期计划：检索策略自适应（查询意图路由）**
 
@@ -379,4 +380,26 @@ docker compose up -d --build
 
 **近期工具扩展**
 
+> 选型原则：优先补产品缺口（生命周期/可解释性），拓展类与 LangGraph 二期一起做（条件边控制触发时机），避免单 Agent Prompt 过度膨胀（远期由 Supervisor 多 Agent 拆分承载）。
+
 - 定时任务 `schedule_task`：支持"N 分钟后发邮件/生成报告"等延迟执行，基于 asyncio 内存级调度（方案 A 轻量版），后续按需升级 Redis 持久化
+- 联网搜索 `web_search`：已计入二期（见上方 LangGraph 迁移表），国内优先选博查（Bocha）中文搜索 API，海外选 Tavily；兜底式触发 + 条件边硬约束
+
+**补缺口（优先做）**：
+
+- 文档删除 `delete_document`：补齐文档生命周期闭环（现有工具集只有上传/统计没有删除），含 MD5 记录 + Chroma 删除 + BM25 重建
+- 来源引用 citation：回答末尾列出引用文档名与片段，实现"可解释 AI"（plant.txt 第 2 周既定目标，随检索 metadata 保留即可落地）
+
+**拓展类（与二期 LangGraph 一起做）**：
+
+- 翻译 `translate`：纯 LLM 调用零外部依赖，与 `convert_format` 组合成"翻译 + 转格式"流水线
+- 网页抓取入库 `fetch_url`：给定 URL 抓取内容 → 复用 RabbitMQ 异步上传链路入知识库，与 `web_search` 组成"一进一出"信息闭环
+- 文档对比 `compare_documents`：合同修订/报告版本对比，纯检索 + LLM 零新依赖
+- 会话总结 `summarize_conversation`：多轮会话要点提炼，为超长会话历史压缩打基础
+
+**可选（视精力而定）**：
+
+- 查询改写 Query Rewriting：多轮追问时用 LLM 补全指代后再检索，二期检索节点内实现
+- 图片理解 `image_understand`：需更换多模态模型（Qwen-VL 等）+ 前端支持图片上传
+- 图表生成 `generate_chart`：matplotlib 生成统计图，复用 SSE 下载链路推送
+- 知识库摘要聚合：跨文档主题聚合，需与 `generate_report` 区分定位（摘要=轻量回答 vs 报告=文件交付）
