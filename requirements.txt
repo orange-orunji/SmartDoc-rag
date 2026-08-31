@@ -10,6 +10,7 @@ langchain-community
 langchain-classic
 langchain-openai
 langchain-chroma
+langgraph
 
 # 向量数据库
 chromadb
