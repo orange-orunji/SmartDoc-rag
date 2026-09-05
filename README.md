@@ -403,4 +403,4 @@ docker compose up -d --build
 - 图片理解 `image_understand`：需更换多模态模型（Qwen-VL 等）+ 前端支持图片上传
 - 图表生成 `generate_chart`：matplotlib 生成统计图，复用 SSE 下载链路推送
 - 知识库摘要聚合：跨文档主题聚合，需与 `generate_report` 区分定位（摘要=轻量回答 vs 报告=文件交付）
-- 加油吧的
+- 加油吧的的
