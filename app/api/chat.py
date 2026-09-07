@@ -85,7 +85,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
 
             async for event in chain.astream_events(
                 {"messages": [("user", history_text + body.question)]},
-                version="v1",
+                version="v2",
             ):
                 e = event["event"]
                 if e == "on_tool_start":

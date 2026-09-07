@@ -7,7 +7,6 @@ starlette>=0.36.0
 langchain-core
 langchain-text-splitters
 langchain-community
-langchain-classic
 langchain-openai
 langchain-chroma
 langgraph

@@ -30,7 +30,7 @@
 │ ▼ FastAPI 服务（单进程托管 API + 静态资源） 
 ├── JWT 认证 → SQLite 用户存储 
 ├── SSE 流式对话
-│   ├── 🤖 Agent 智能体（主路径）─ create_tool_calling_agent + AgentExecutor
+│   ├── 🤖 Agent 智能体（主路径）─ LangGraph create_react_agent
 │   │   ├── search_knowledge_base ─ HyDE + 向量 + BM25 + Rerank 全流程检索
 │   │   ├── upload_document ─ 文档内容异步入库（RabbitMQ）
 │   │   ├── get_document_status ─ 知识库统计 + 关键词过滤
@@ -320,6 +320,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.8.4** | 2026-09-07 | LangGraph 一期迁移：预置 `create_react_agent` 替换 `AgentExecutor`（移除 langchain-classic 依赖）+ 对话输入改 `messages` 约定 + `astream_events` v1→v2 事件协议升级（消除弃用警告）；冒烟验证（token 流式/工具提示/多轮追问）7/7 通过 |
 | **1.8.3** | 2026-08-14 | 统一日志（`logging_config.py` 文件轮转 + HTTP 请求中间件 + 工具调用/输出帧埋点）；压测量化（/health 884 req/s、登录 233 req/s、端到端 14.5s）；多轮对话 Agent 路径实测验证；安全加固（.env 解除 git 跟踪、JWT 密钥环境变量化） |
 | **1.8.2** | 2026-08-13 | 流式输出修复：`astream_events` token 级流式（帧数 2→524）+ SSE JSON 编码（修复代码块 `\n` 误还原）+ 前端 normalizeTables v2（相邻表格/说明文字吞并）+ 工具提示独立渲染 + Prompt 表格规范 |
 | **1.8.1** | 2026-08-13 | 检索策略自适应二期：CN_FACT_PATTERN 中文精确句式 + adaptive_retrieve 全量接入（工具/LLM 双入口）+ RRF 融合；38 切片评测 adaptive 59.67% 反超全量混合基线 2pp；Embedding 统一工厂（text-embedding-v4 按量付费回切）；上传链路修复（失败重试不再必失败 + 死信队列声明） |
@@ -335,15 +336,15 @@ docker compose up -d --build
 
 ### 🗺️ 路线图
 
-**近期计划：Agent 架构升级（AgentExecutor → LangGraph）**
+**LangGraph 迁移（一期 ✅ 已完成 2026-09-07，二期进行中）**
 
-> 现状：Agent 基于 `langchain_classic` 的 `AgentExecutor`（官方已标记为 legacy），存在三个局限：
-> ① 流程只能靠 Prompt 软约束，无法强制"先检索后回答"；② 对话历史需手工拼接注入；③ 回答为整段返回，非真正的 token 级流式。
+> 一期成果：引入 `langgraph`，预置 `create_react_agent` 替换 `AgentExecutor`（复用 6 工具，系统提示词提取为顶格常量保证文本一致）；对话输入改 `messages` 约定；`astream_events` v1→v2 事件协议升级（消除弃用警告）；两轮冒烟验证（token 级流式 / 工具调用提示 / 多轮追问）7/7 通过。
+> 二期待办：Checkpointer 多轮记忆（自手工拼接迁移）、自定义 StateGraph 硬约束、interrupt 人机协同、web_search。
 
 | 阶段 | 整改内容 | 预期收益 |
 |------|---------|---------|
-| 一期 | 引入 `langgraph`，用预置 `create_react_agent` 替换 `AgentExecutor`，复用现有 6 个工具与系统提示词 | 真·token 级流式输出，代码与 LangChain 官方主线对齐 |
-| 一期 | 用 Checkpointer 接管多轮记忆（thread_id 按用户+会话隔离），与现有 JSON 历史文件双写过渡 | 告别手工拼接历史文本，多轮状态自动持久化 |
+| 一期 ✅ | 引入 `langgraph`，用预置 `create_react_agent` 替换 `AgentExecutor`，复用现有 6 个工具与系统提示词；输入改 `messages` 约定；事件流升级 v2 | 真·token 级流式输出，代码与 LangChain 官方主线对齐 |
+| 二期 | 用 Checkpointer 接管多轮记忆（thread_id 按用户+会话隔离），与现有 JSON 历史文件双写过渡，替代手工拼接历史文本 | 多轮状态自动持久化，历史注入交给框架 |
 | 二期 | 自定义 StateGraph：将"必须先检索知识库"从 Prompt 规则升级为图结构硬约束（入口强制经过检索节点） | 检索流程由代码保证而非模型自觉，Prompt 大幅精简 |
 | 二期 | 敏感操作人机协同：`send_email` 等工具执行前 interrupt 中断，等待用户确认后恢复执行 | 避免误发邮件，Agent 行为更可控 |
 | 二期 | 联网搜索 `web_search`：知识库检索为空且涉及时效性问题时兜底调用，条件边硬约束控制触发时机；回答标注"根据网络搜索：<来源URL>" | 时效性问题可回答；多源答案三级标注体系（知识库/网络/通用知识） |
@@ -403,4 +404,3 @@ docker compose up -d --build
 - 图片理解 `image_understand`：需更换多模态模型（Qwen-VL 等）+ 前端支持图片上传
 - 图表生成 `generate_chart`：matplotlib 生成统计图，复用 SSE 下载链路推送
 - 知识库摘要聚合：跨文档主题聚合，需与 `generate_report` 区分定位（摘要=轻量回答 vs 报告=文件交付）
-- 加油吧的的
