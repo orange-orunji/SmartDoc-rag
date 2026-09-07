@@ -84,7 +84,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                 history_text = "\n".join(lines) + "\n\n## 当前问题\n"
 
             async for event in chain.astream_events(
-                {"input": history_text + body.question},
+                {"messages": [("user", history_text + body.question)]},
                 version="v1",
             ):
                 e = event["event"]
@@ -148,6 +148,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
 
 @router.get("/history/{session_id}", response_model=HistoryResponse)
 async def get_history(session_id: str, current_user: dict = Depends(get_current_user)):
+    """获取会话历史"""
     history = get_file_chat_history(session_id,user_id=current_user["user_id"])
     # 将 BaseMessage 列表转为可序列化的字典列表
     messages = []
