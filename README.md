@@ -33,6 +33,7 @@
 │   ├── 🤖 Agent 智能体（主路径）─ LangGraph create_react_agent
 │   │   ├── search_knowledge_base ─ HyDE + 向量 + BM25 + Rerank 全流程检索
 │   │   ├── upload_document ─ 文档内容异步入库（RabbitMQ）
+│   │   ├── delete_document ─ 文档删除（Chroma/MD5/BM25 联动清理）
 │   │   ├── get_document_status ─ 知识库统计 + 关键词过滤
 │   │   ├── generate_report ─ 检索 + LLM 汇总 → Markdown 报告
 │   │   ├── convert_format ─ 报告格式转换（md/txt/docx）
@@ -98,7 +99,7 @@ sequenceDiagram
 ## ✨ 核心亮点
 
 - **多格式文档解析**：支持 PDF、Word(.docx)、Markdown、TXT 文件自动解析与向量化
-- **Agent 自主决策**：6 个 Function Calling 工具，自动选择检索/上传/统计/报告生成/格式转换/邮件发送
+- **Agent 自主决策**：7 个 Function Calling 工具，自动选择检索/上传/删除/统计/报告生成/格式转换/邮件发送
 - **报告生成 + 下载**：Agent 检索知识库 → LLM 汇总 → 保存 Markdown → SSE 推送下载按钮
 - **文件格式转换**：支持 md → docx / txt / md 互转，Markdown 语法自动清洗
 - **邮件发送**：SMTP 协议发送，支持正文 + 附件（QQ 邮箱 / 企业邮箱）
@@ -108,6 +109,7 @@ sequenceDiagram
 - **文档 MD5 去重**：上传时自动检测内容 MD5，避免相同文档重复入库，同时重建 BM25 全量索引
 - **双层热点缓存**：MD5 精确匹配（Redis）+ 语义相似度匹配（内存向量 LRU 上限 200 条），缓存命中时延迟从 ~20s 降至 ~0.01s
 - **真·Token 级流式输出**：基于 `astream_events` 逐 token 推送 + SSE JSON 编码无损传输（代码块 `\n` 不被误还原），前端打字机效果 + Markdown 实时渲染（表格/代码块/标题/列表）；工具调用提示独立展示不混入回答；渲染前表格规范化（相邻表格自动补空行）
+- **来源引用（可解释 AI）**：检索片段注入【来源：文件名】头 + Prompt 引用标注要求，回答句末标注来源并列出引用来源，来源由检索层保证而非模型凭空编造
 - **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯
 - **多用户认证与隔离**：JWT 认证 + HTTP Bearer Token，用户数据完全物理隔离
 - **会话管理**：新建、切换、重命名、删除会话，每个会话独立保持上下文
@@ -320,6 +322,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.8.5** | 2026-09-07 | 工具集补缺口：新增 `delete_document` 删除工具（Chroma 切片 + MD5 记录 + BM25 索引三处联动清理，删除后同内容可重新上传，实测 8/8 通过）+ 检索来源注入 citation（工具返回带【来源：文件名】头 + Prompt 引用标注，回答句末标注来源） |
 | **1.8.4** | 2026-09-07 | LangGraph 一期迁移：预置 `create_react_agent` 替换 `AgentExecutor`（移除 langchain-classic 依赖）+ 对话输入改 `messages` 约定 + `astream_events` v1→v2 事件协议升级（消除弃用警告）；冒烟验证（token 流式/工具提示/多轮追问）7/7 通过 |
 | **1.8.3** | 2026-08-14 | 统一日志（`logging_config.py` 文件轮转 + HTTP 请求中间件 + 工具调用/输出帧埋点）；压测量化（/health 884 req/s、登录 233 req/s、端到端 14.5s）；多轮对话 Agent 路径实测验证；安全加固（.env 解除 git 跟踪、JWT 密钥环境变量化） |
 | **1.8.2** | 2026-08-13 | 流式输出修复：`astream_events` token 级流式（帧数 2→524）+ SSE JSON 编码（修复代码块 `\n` 误还原）+ 前端 normalizeTables v2（相邻表格/说明文字吞并）+ 工具提示独立渲染 + Prompt 表格规范 |
@@ -386,10 +389,10 @@ docker compose up -d --build
 - 定时任务 `schedule_task`：支持"N 分钟后发邮件/生成报告"等延迟执行，基于 asyncio 内存级调度（方案 A 轻量版），后续按需升级 Redis 持久化
 - 联网搜索 `web_search`：已计入二期（见上方 LangGraph 迁移表），国内优先选博查（Bocha）中文搜索 API，海外选 Tavily；兜底式触发 + 条件边硬约束
 
-**补缺口（优先做）**：
+**补缺口**（✅ 已完成 2026-09-07）：
 
-- 文档删除 `delete_document`：补齐文档生命周期闭环（现有工具集只有上传/统计没有删除），含 MD5 记录 + Chroma 删除 + BM25 重建
-- 来源引用 citation：回答末尾列出引用文档名与片段，实现"可解释 AI"（plant.txt 第 2 周既定目标，随检索 metadata 保留即可落地）
+- 文档删除 `delete_document`：Chroma 切片删除 + MD5 记录清理 + BM25 索引重建三处联动，删除后同内容文件可重新上传（生命周期闭环，冒烟 8/8 通过）
+- 来源引用 citation：检索结果注入【来源：文件名】头 + Prompt 引用标注要求，回答句末标注来源并列出引用（可解释 AI）
 
 **拓展类（与二期 LangGraph 一起做）**：
 
