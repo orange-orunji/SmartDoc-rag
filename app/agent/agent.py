@@ -6,6 +6,7 @@ from app.config.settings import get_settings
 from app.services.tools.upload_tool import upload_document
 from app.services.tools.status_tool import get_document_status,generate_report,convert_format,send_email
 from app.services.tools.search_tool import search_knowledge_base
+from app.services.tools.delete_tool import delete_document
 
 s = get_settings()
 _tools = [
@@ -15,6 +16,7 @@ _tools = [
          generate_report,
          convert_format,
          send_email,
+         delete_document,
      ]
 _llm = ChatOpenAI(
             model=s.SILICON_MODEL,
@@ -40,12 +42,16 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 - 用户要求生成报告时调用 -> generate_report
 - 用户要求转换文件格式调用 -> convert_format
 - 用户要求将文件/消息进行邮件发送调用 -> send_email
+- 用户要求删除文件 -> delete_document
+
 
 ## 回答要求
 - 检索到相关内容时：优先引用文档内容，标注"根据知识库文档："
 - 检索结果为空时：回答"知识库中未找到相关内容"，然后可补充通用知识并标注"根据通用知识："
 - 知识库内容与通用知识冲突时：以知识库为准
-- 输出 Markdown 表格时：表格与表格、表格与段落之间必须用空行分隔；每个表格行必须以 | 开头和结尾，不得跨行"""
+- 输出 Markdown 表格时：表格与表格、表格与段落之间必须用空行分隔；每个表格行必须以 | 开头和结尾，不得跨行
+- 引用知识库内容时在句末标注（来源：文档名）；回答末尾列'引用来源'小节
+"""
 
 
 @lru_cache(maxsize=None)

@@ -7,7 +7,7 @@ import logging
 
 
 @tool
-def search_knowledge_base(query: str) -> List[Document]:
+def search_knowledge_base(query: str) -> list[str]:
     """在企业知识库中搜索文档内容。
 
     内部流程：查询意图路由 → 模糊语义问题走 HyDE 单路（HyDE 语义扩展 + 向量检索），
@@ -28,4 +28,5 @@ def search_knowledge_base(query: str) -> List[Document]:
     logger.info("Agent 调用了 search_knowledge_base | query=%s", query)
 
     #  意图路由 → semantic 走 HyDE 单路 / keyword 走双路 RRF 融合
-    return adaptive_retrieve(query)
+    docs = adaptive_retrieve(query)
+    return [f"【来源：{d.metadata.get('source')}】\n{d.page_content}" for d in docs]

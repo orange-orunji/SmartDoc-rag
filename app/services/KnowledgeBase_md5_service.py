@@ -37,6 +37,15 @@ def get_string_md5(input_str: str, encoding ="utf-8"):
     md_5.update(encode)
     return md_5.hexdigest()
 
+def delete_md5(md5_file_path: str,md5_value: str):
+    """删除文件md5"""
+    with open(md5_file_path,"r",encoding="utf-8") as f:
+        lines = f.readlines()
+    with open(md5_file_path,"w",encoding="utf-8") as f:
+        for line in lines:
+            if line.strip() != md5_value:
+                f.write(line)
+
 class KnowledgeBaseService:
     def __init__(self):
         self.s = get_settings()
@@ -86,3 +95,5 @@ class KnowledgeBaseService:
         except Exception as e:
              return UnifiedResponse(code=500,message="error",data=f"数据异常上传失败: {str(e)}")
         return UnifiedResponse(data="[Success] 文件上传成功")
+
+knowledgeBaseService = KnowledgeBaseService()
