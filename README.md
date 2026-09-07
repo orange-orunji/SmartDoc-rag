@@ -395,6 +395,10 @@ docker compose up -d --build
 - 文档删除 `delete_document`：Chroma 切片删除 + MD5 记录清理 + BM25 索引重建三处联动，删除后同内容文件可重新上传（生命周期闭环，冒烟 8/8 通过）
 - 来源引用 citation：检索结果注入【来源：文件名】头 + Prompt 引用标注要求，回答句末标注来源并列出引用（可解释 AI）
 
+**缓存一致性增强（待办，与二期一起做）**：
+
+- `SemanticCache.invalidate(user_id)` 主动失效：`delete_document` / `upload_document` 执行成功后清除该用户的语义缓存，比动作词黑名单更彻底（当前读侧拦截 + 写侧不缓存已覆盖主路径，主动失效作为纵深防御）
+
 **拓展类（与二期 LangGraph 一起做）**：
 
 - 翻译 `translate`：纯 LLM 调用零外部依赖，与 `convert_format` 组合成"翻译 + 转格式"流水线
