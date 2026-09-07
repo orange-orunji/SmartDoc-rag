@@ -34,6 +34,13 @@ def _sse_encode(text: str) -> str:
     前端 JSON.parse 即可无损还原。
     """
     return json.dumps(text, ensure_ascii=False)
+
+_ACTION_WORDS = ("删除", "删掉", "移除", "清理", "去掉", "上传", "存入",
+                 "入库", "保存", "发送", "发邮件", "生成报告", "导出")
+
+def _is_action_request(question:str) -> bool:
+    """判断问题是否包含动作词"""
+    return any(word in question for word in _ACTION_WORDS)
 """
 流式输出接口
 """
@@ -42,7 +49,7 @@ def _sse_encode(text: str) -> str:
 async def stream_chat(request: Request, body: ChatRequest, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["user_id"])
     t_start = time.time()
-    if redis:
+    if redis and not _is_action_request(body.question):
         # 1. 语义相似度缓存
         cached_answer = semantic_cache.lookup(body.question, user_id)
         if cached_answer:
@@ -133,7 +140,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             else:
                 yield f"data: {_sse_encode('【系统错误】' + str(e))}\n\n"
         finally:
-            if all_request and redis:
+            if all_request and redis and not tool_times: # not tool_times 表示没有调用工具，才进行缓存
                 question_hash = hashlib.md5(body.question.encode()).hexdigest()
                 user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
                 redis.setex(name=user_key, value=all_request, time=s.REDIS_EXPIRE)
