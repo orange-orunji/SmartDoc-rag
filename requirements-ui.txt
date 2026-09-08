@@ -1,0 +1,7 @@
+# 可选 Streamlit 前端依赖（主前端为 app/static 纯 HTML）
+# 启动方式：streamlit run app/ui.py
+# 说明：UI 是独立客户端，仅需本文件依赖，无需安装主依赖
+
+streamlit~=1.59.1
+streamlit-cookies-manager~=0.2.0
+requests~=2.34.2
