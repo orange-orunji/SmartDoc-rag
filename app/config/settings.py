@@ -32,7 +32,7 @@ class settings(BaseSettings):
     # ── API 配置 ──
     SILICON_API_KEY: str
     SILICON_BASE_URL: str = "https://api.deepseek.com"
-    SILICON_MODEL: str = "deepseek-v4-flash"
+    SILICON_MODEL: str = "deepseek-flash"
     DASHSCOPE_API_KEY: str = ""
 
     # ── Embedding 配置（DashScope OpenAI 兼容接口）──
