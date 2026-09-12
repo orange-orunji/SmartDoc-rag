@@ -50,6 +50,7 @@
 │ ├── RabbitMQ Topic 交换机 
 │ ├── 文件内容 Redis 暂存（600s 过期） 
 │ └── 内嵌 Worker 异步消费 
+├── 会话记忆持久化（LangGraph Checkpointer · AsyncSqliteSaver） 
 └── 对话历史持久化（JSON 文件按用户/会话隔离）
 ```
 
@@ -110,7 +111,7 @@ sequenceDiagram
 - **双层热点缓存**：MD5 精确匹配（Redis）+ 语义相似度匹配（内存向量 LRU 上限 200 条），缓存命中时延迟从 ~20s 降至 ~0.01s；工具调用轮不写缓存 + 动作指令（删除/上传/发送等）跳过缓存查找，杜绝“假成功”与状态陈旧（冒烟 6/6）
 - **真·Token 级流式输出**：基于 `astream_events` 逐 token 推送 + SSE JSON 编码无损传输（代码块 `\n` 不被误还原），前端打字机效果 + Markdown 实时渲染（表格/代码块/标题/列表）；工具调用提示独立展示不混入回答；渲染前表格规范化（相邻表格自动补空行）
 - **来源引用（可解释 AI）**：检索片段注入【来源：文件名】头 + Prompt 引用标注要求，回答句末标注来源并列出引用来源，来源由检索层保证而非模型凭空编造
-- **多轮对话记忆**：基于 LangChain `RunnableWithMessageHistory` + 自研文件持久化存储，支持会话隔离与历史回溯
+- **多轮对话记忆（LangGraph Checkpointer）**：Checkpointer + AsyncSqliteSaver 接管会话记忆并持久化（重启不丢），thread_id 按“用户+会话”隔离；历史注入重构为增量模式（防重复），会话删除/重命名与会话记忆联动清理
 - **多用户认证与隔离**：JWT 认证 + HTTP Bearer Token，用户数据完全物理隔离
 - **会话管理**：新建、切换、重命名、删除会话，每个会话独立保持上下文
 - **查询意图路由器**：三层漏斗路由（正则精确标记 → 语料 IDF 稀有词信号 → 默认语义），300 题评测下语义组 75.3% / 精确组 86.0% 正确分流，检索层 Recall@1 59.67% 反超全量混合基线 2pp
@@ -163,7 +164,7 @@ RAG_Personal/
 │   │   ├── chat.py                  # SSE 流式对话、会话管理
 │   │   └── document.py              # 文档异步上传
 │   ├── agent/                       # Agent 智能体
-│   │   └── agent.py                 # Agent 定义 + 工具注册 + Prompt
+│   │   └── agent.py                 # Agent 定义 + 工具注册 + Prompt + Checkpointer 注入
 │   ├── services/                    # 业务层
 │   │   ├── tools/                   # Agent 工具集
 │   │   │   ├── status_tool.py       # 知识库统计 + 报告生成 + 格式转换 + 邮件发送
@@ -300,7 +301,7 @@ docker compose up -d --build
 | 🐰 RabbitMQ 管理台 | http://localhost:15673（rag / rag123456） |
 | 🗄️ Redis | localhost:6380 |
 
-> 💡 说明：`docker-compose.yml` 已通过 `env_file` 注入你的 `.env`，API Key 无需重复配置；向量库、对话历史、报告文件均通过 volume 持久化到宿主机 `app/data/`，容器重建不丢数据。
+> 💡 说明：`docker-compose.yml` 已通过 `env_file` 注入你的 `.env`，API Key 无需重复配置；向量库、对话历史、会话记忆（checkpoints.db）、报告文件均通过 volume 持久化到宿主机 `app/data/`，容器重建不丢数据。
 
 ## 🔧 常见问题
 
@@ -322,6 +323,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.9.0** | 2026-09-12 | LangGraph 二期·Checkpointer 多轮记忆落地：`AsyncSqliteSaver` 接入 FastAPI lifespan（重启记忆不丢）、thread_id 按“用户+会话”隔离、历史注入割接增量模式、会话删除/重命名联动清理记忆；同步修复语义/ MD5 缓存未按会话隔离的跨会话复用缺陷；验收（多轮/隔离/删除联动/重启持久化）全绿 |
 | **1.8.6** | 2026-09-07 | 语义缓存白名单修复：动作指令（删除/上传/发送等 13 词）读侧拦截跳过缓存查找 + 工具调用轮写侧不写缓存（`not tool_times`），修复“删除指令命中缓存返回假成功”与“统计/检索回答状态陈旧”；冒烟 6/6 通过（同文删除两次均真实执行、删除后同文统计返回新状态、纯问答二次命中缓存正常） |
 | **1.8.5** | 2026-09-07 | 工具集补缺口：新增 `delete_document` 删除工具（Chroma 切片 + MD5 记录 + BM25 索引三处联动清理，删除后同内容可重新上传，实测 8/8 通过）+ 检索来源注入 citation（工具返回带【来源：文件名】头 + Prompt 引用标注，回答句末标注来源） |
 | **1.8.4** | 2026-09-07 | LangGraph 一期迁移：预置 `create_react_agent` 替换 `AgentExecutor`（移除 langchain-classic 依赖）+ 对话输入改 `messages` 约定 + `astream_events` v1→v2 事件协议升级（消除弃用警告）；冒烟验证（token 流式/工具提示/多轮追问）7/7 通过 |
@@ -343,12 +345,13 @@ docker compose up -d --build
 **LangGraph 迁移（一期 ✅ 已完成 2026-09-07，二期进行中）**
 
 > 一期成果：引入 `langgraph`，预置 `create_react_agent` 替换 `AgentExecutor`（复用 6 工具，系统提示词提取为顶格常量保证文本一致）；对话输入改 `messages` 约定；`astream_events` v1→v2 事件协议升级（消除弃用警告）；两轮冒烟验证（token 级流式 / 工具调用提示 / 多轮追问）7/7 通过。
-> 二期待办：Checkpointer 多轮记忆（自手工拼接迁移）、自定义 StateGraph 硬约束、interrupt 人机协同、web_search。
+> 二期进展（2026-09-12）：**Checkpointer 多轮记忆 ✅ 已落地**——`AsyncSqliteSaver` 持久化（重启不丢）、thread_id 按用户+会话隔离、历史注入割接增量模式、会话删除/重命名联动清理；验收全绿，并顺带修复缓存跨会话复用缺陷。
+> 二期待办：自定义 StateGraph 硬约束、interrupt 人机协同、web_search。
 
 | 阶段 | 整改内容 | 预期收益 |
 |------|---------|---------|
 | 一期 ✅ | 引入 `langgraph`，用预置 `create_react_agent` 替换 `AgentExecutor`，复用现有 6 个工具与系统提示词；输入改 `messages` 约定；事件流升级 v2 | 真·token 级流式输出，代码与 LangChain 官方主线对齐 |
-| 二期 | 用 Checkpointer 接管多轮记忆（thread_id 按用户+会话隔离），与现有 JSON 历史文件双写过渡，替代手工拼接历史文本 | 多轮状态自动持久化，历史注入交给框架 |
+| 二期 ✅ | 用 Checkpointer 接管多轮记忆（thread_id 按用户+会话隔离），与现有 JSON 历史文件双写过渡，替代手工拼接历史文本（2026-09-12 完成，含重启持久化验收） | 多轮状态自动持久化，历史注入交给框架 |
 | 二期 | 自定义 StateGraph：将"必须先检索知识库"从 Prompt 规则升级为图结构硬约束（入口强制经过检索节点） | 检索流程由代码保证而非模型自觉，Prompt 大幅精简 |
 | 二期 | 敏感操作人机协同：`send_email` 等工具执行前 interrupt 中断，等待用户确认后恢复执行 | 避免误发邮件，Agent 行为更可控 |
 | 二期 | 联网搜索 `web_search`：知识库检索为空且涉及时效性问题时兜底调用，条件边硬约束控制触发时机；回答标注"根据网络搜索：<来源URL>" | 时效性问题可回答；多源答案三级标注体系（知识库/网络/通用知识） |
@@ -380,7 +383,15 @@ docker compose up -d --build
 |------|---------|---------|
 | 🤝 架构演进 | 多 Agent 协作：基于 LangGraph Supervisor 模式，拆分知识库 Agent（检索/统计/上传）与办公 Agent（报告/转换/邮件），由主管 Agent 统一调度 | 工具集解耦，单 Agent 提示词膨胀问题解决，具备横向扩展新角色的能力 |
 | 🏭 业务延展 | 垂直领域模板化：将检索链路抽象为可配置底座（语料 + Prompt + 评测集三件套热替换），优先落地金融研报分析、法律合规审查等高价值场景 | 同一套技术底座覆盖多个业务域，从"工具"升级为"平台" |
-| 📈 质量体系 | 评测规模化与在线监控：评测集扩展至 100+ 条、语料扩展至 50+ 篇，验证 BM25 在大规模语料下的增益；上线检索命中率、缓存命中率、全链路延迟监控面板 | 用数据驱动检索策略调优，优化效果可量化、可回归 |
+| 📈 质量体系 | 评测规模化与在线监控：评测集扩展至 100+ 条、语料扩展至feat: LangGraph Checkpointer 接管多轮记忆（二期第一步完成）
+
+- agent.py: checkpointer 注入模式（模块级单例 + setter/getter）
+- chat.py: thread_id 按"用户+会话"隔离，历史注入割接为增量模式
+- chat.py: 会话删除/重命名联动清理会话记忆
+- main.py: AsyncSqliteSaver 接入 FastAPI lifespan（重启记忆不丢）
+- settings.py: 新增 CHECKPOINT_DB_PATH 配置项
+- fix: 修复缓存未按会话隔离导致的跨会话复用缺陷
+- README: 1.9.0 更新日志 + 路线图二期进展 50+ 篇，验证 BM25 在大规模语料下的增益；上线检索命中率、缓存命中率、全链路延迟监控面板 | 用数据驱动检索策略调优，优化效果可量化、可回归 |
 | 🔍 查询理解 | ~~查询意图分类~~ 已提前至近期计划（见上方「检索策略自适应」改造清单） | 检索策略从"固定流水线"进化为"自适应路由" |
 
 **近期工具扩展**
