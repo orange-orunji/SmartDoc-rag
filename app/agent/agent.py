@@ -56,9 +56,12 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 
 _checkpointer = InMemorySaver()
 
+def get_checkpointer():
+    return _checkpointer
+
 @lru_cache(maxsize=None)
 def get_agent():
     return create_react_agent(model=_llm,
                               tools=_tools,
                               prompt=_SYSTEM_PROMPT ,
-                              checkpointer=_checkpointer)
+                              checkpointer=get_checkpointer())

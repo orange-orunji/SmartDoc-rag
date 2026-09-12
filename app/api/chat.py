@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Request
 from langchain_core.messages import HumanMessage, AIMessage
 
-from app.agent.agent import get_agent
+from app.agent.agent import get_agent, get_checkpointer
 from app.api.auth import current_user_ctx
 from app.schemas.chat import ChatRequest, RenameRequest, HistoryResponse, SessionListResponse, SessionActionResponse
 from app.services.history_service import get_file_chat_history
@@ -192,6 +192,7 @@ async def delete_session(session_id: str, current_user: dict = Depends(get_curre
         return {"code": 404, "message": "会话不存在"}
 
     os.remove(file_path)
+    get_checkpointer().delete_thread(f"{user_id}_{session_id}")
     return {"code": 200, "message": f"会话 {session_id} 已删除"}
 
 
@@ -218,4 +219,5 @@ async def rename_session(session_id: str, request: RenameRequest, current_user: 
         with open(new_path, "w", encoding="utf-8") as f:
             json.dump([], f)
 
+    get_checkpointer().delete_thread(f"{user_id}_{session_id}")
     return {"code": 200, "message": "重命名成功", "data": {"new_name": new_name}}
