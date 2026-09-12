@@ -7,8 +7,11 @@ import asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+
+from app.agent.agent import set_checkpointer, get_checkpointer
 from app.api.chat import router as chat_router, limiter
 from app.api.document import router as document_router
 from app.api.auth import router as auth_router
@@ -74,7 +77,13 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("BM25 索引构建完成，文档数: %d", len(all_docs))
 
-    yield  # ← FastAPI 在此运行
+    # ── 初始化检查点 ──
+    async with AsyncSqliteSaver.from_conn_string(cfg.CHECKPOINT_DIR) as saver:
+        await saver.setup()
+        set_checkpointer(saver)
+        if get_checkpointer() is None:
+            logger.error("checkpointer 注入失败")
+        yield # ← FastAPI 在此运行
 
     # ── 关闭时：取消 Worker 并断开 ──
     if worker_task is not None:

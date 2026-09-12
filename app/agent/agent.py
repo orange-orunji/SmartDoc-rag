@@ -54,7 +54,12 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 - 引用知识库内容时在句末标注（来源：文档名）；回答末尾列'引用来源'小节
 """
 
-_checkpointer = InMemorySaver()
+_checkpointer = None
+
+# 注入检查点，用于保存中间状态，防止无状态的图被缓存
+def set_checkpointer(cp):
+    global _checkpointer
+    _checkpointer = cp
 
 def get_checkpointer():
     return _checkpointer

@@ -102,6 +102,9 @@ class settings(BaseSettings):
     SMTP_USER: str
     SMTP_PASSWORD: str     # QQ邮箱用授权码，不是登录密码
 
+    # —— 检查点保存路径 ——
+    CHECKPOINT_DIR: str = str(BASE_DIR / "app/data/checkpoints.db")
+
     @property
     def is_production(self) -> bool:
         return self.ENV == "production"
