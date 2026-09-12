@@ -81,18 +81,14 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             # chain = get_rag_chain(user_id)
             current_user_ctx.set(user_id)
             chain = get_agent()
-            # 格式化历史消息为结构化文本
-            history_text = ""
-            if chat_history.messages:
-                lines = ["## 对话历史"]
-                for m in chat_history.messages[-10:]:
-                    role = "用户" if m.type == "human" else "助手"
-                    lines.append(f"- {role}: {m.content}")
-                history_text = "\n".join(lines) + "\n\n## 当前问题\n"
+
+            # 注入配置参数，指定 thread_id
+            _config = {"configurable": {"thread_id": f"{user_id}_{body.session_id}"}}
 
             async for event in chain.astream_events(
-                {"messages": [("user", history_text + body.question)]},
+                {"messages": [("user", body.question)]},
                 version="v2",
+                config=_config
             ):
                 e = event["event"]
                 if e == "on_tool_start":
