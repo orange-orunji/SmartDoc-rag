@@ -1,6 +1,7 @@
 from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from functools import lru_cache
+from langgraph.checkpoint.memory import InMemorySaver
 
 from app.config.settings import get_settings
 from app.services.tools.upload_tool import upload_document
@@ -53,7 +54,11 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 - 引用知识库内容时在句末标注（来源：文档名）；回答末尾列'引用来源'小节
 """
 
+_checkpointer = InMemorySaver()
 
 @lru_cache(maxsize=None)
 def get_agent():
-    return create_react_agent(model=_llm, tools=_tools, prompt=_SYSTEM_PROMPT)
+    return create_react_agent(model=_llm,
+                              tools=_tools,
+                              prompt=_SYSTEM_PROMPT ,
+                              checkpointer=_checkpointer)
