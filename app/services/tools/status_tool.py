@@ -2,6 +2,7 @@ import os
 import time
 
 from langchain_core.tools import tool
+from langgraph.types import interrupt
 
 from app.services.hyde import llm, hyde_plus_rerank_bm25_retrieve
 from app.services.vector_store import vector_store_service as vss
@@ -100,15 +101,10 @@ def send_email(to : str = "", subject : str = "", body : str = "", attachment : 
     :return:
     """
     s = get_settings()
+#       1. 中断前构建 MIMEMultipart 邮件（支持正文 + 附件）
     try:
-        import smtplib
-        smtp_obj = smtplib.SMTP(s.SMTP_HOST, s.SMTP_PORT)
-        smtp_obj.starttls()
-        smtp_obj.login(s.SMTP_USER, s.SMTP_PASSWORD)
-
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
-        #       2. 构建 MIMEMultipart 邮件（支持正文 + 附件）
         msg = MIMEMultipart()
         msg["From"] = s.SMTP_USER
         msg["To"] = to
@@ -117,6 +113,24 @@ def send_email(to : str = "", subject : str = "", body : str = "", attachment : 
 
         from email import encoders
         from email.mime.base import MIMEBase
+    except Exception as e:
+        return f"邮件发送失败：{str(e)}"
+ #    传递前端渲染审批卡片
+    decision = interrupt({
+        "question": f"确认发送邮件给{to}?",
+        "to": to,
+        "subject": subject,
+        "body": body[:300],  # 正文预览(手动阶段)
+        "attachment": [attachment] if attachment else [], # 只传文件名
+    })
+    #
+    if decision:
+        # 2. 连接 SMTP 服务器
+        import smtplib
+        smtp_obj = smtplib.SMTP(s.SMTP_HOST, s.SMTP_PORT)
+        smtp_obj.starttls()
+        smtp_obj.login(s.SMTP_USER, s.SMTP_PASSWORD)
+
         #       3. 如果有附件，从 report 目录读取并附加
         if attachment:
             file_path = f"{s.REPORT_FILE_PATH}/{attachment}"
@@ -127,12 +141,13 @@ def send_email(to : str = "", subject : str = "", body : str = "", attachment : 
                 part.add_header("Content-Disposition", f"attachment; filename={attachment}")
                 msg.attach(part)                                # 附加附件
 
-        #       4. 发送邮件
+
+        #       4. 中断询问是否发送邮件
         smtp_obj.sendmail(s.SMTP_USER, to, msg.as_string())
         smtp_obj.quit()
         return f"邮件已发送至 {to}，主题：{subject}"
-    except Exception as e:
-        return f"邮件发送失败：{str(e)}"
+    else:
+        return "用户拒绝了本次发送。"
 
 
 @tool
