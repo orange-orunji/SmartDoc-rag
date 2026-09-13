@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from app.schemas.response import UnifiedResponse
 from app.services.document import validate_upload
+from app.services.vector_store import vector_store_service as vss
 from app.utils.auth import get_current_user
 from app.utils.rabbitmq import rabbitmq
 from app.utils.redis_client import get_redis
@@ -58,3 +59,27 @@ async def get_upload_status(task_id: str) -> UnifiedResponse:
     if not status:
         return UnifiedResponse(code=404, message="任务不存在或已过期")
     return UnifiedResponse.success(data=status)
+
+
+@router.get("/stats", summary="知识库概览统计", description="空状态概览卡数据源：文档数、分块数、最近文档")
+async def knowledge_base_stats(current_user: dict = Depends(get_current_user)) -> UnifiedResponse:
+    documents = vss.get_all_documents()
+
+    # 按文件名（metadata.source）聚合分块数
+    file_map: dict[str, dict] = {}
+    for doc in documents:
+        source = doc.metadata.get("source", "未知文件")
+        if source not in file_map:
+            file_map[source] = {
+                "name": source,
+                "chunks": 0,
+                "create_time": doc.metadata.get("create_time", ""),
+            }
+        file_map[source]["chunks"] += 1
+
+    files = sorted(file_map.values(), key=lambda x: str(x["create_time"]), reverse=True)
+    return UnifiedResponse.success(data={
+        "doc_count": len(files),
+        "chunk_count": len(documents),
+        "recent_files": [f["name"] for f in files[:3]],
+    })

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 
 from app.agent.agent import set_checkpointer, get_checkpointer
 from app.api.chat import router as chat_router, limiter
@@ -75,6 +76,17 @@ async def lifespan(app: FastAPI):
         ]
     bm25_service.build_index(all_docs)
     Base.metadata.create_all(bind=engine)
+    # 轻量迁移：users 表补充资料字段（create_all 不会为已存在的表加列）
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+        for col, ddl in (
+            ("display_name", "VARCHAR DEFAULT ''"),
+            ("avatar", "VARCHAR DEFAULT ''"),
+            ("bio", "VARCHAR DEFAULT ''"),
+        ):
+            if col not in cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
+        conn.commit()
     logger.info("BM25 索引构建完成，文档数: %d", len(all_docs))
 
     # ── 初始化检查点 ──
@@ -110,7 +122,7 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """请求日志：方法/路径/状态码/耗时（静态资源跳过，避免刷屏）"""
-    if request.url.path.startswith(("/static", "/assets", "/reports")):
+    if request.url.path.startswith(("/static", "/assets", "/reports", "/avatars")):
         return await call_next(request)
     t0 = time.time()
     response = await call_next(request)
@@ -156,6 +168,11 @@ app.mount("/static", StaticFiles(directory="app/static", html=True), name="stati
 REPORT_DIR = BASE_DIR / "app/data/report"
 os.makedirs(REPORT_DIR, exist_ok=True)
 app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
+
+# 确保头像目录存在后再挂载
+AVATAR_DIR = BASE_DIR / "app/data/avatars"
+os.makedirs(AVATAR_DIR, exist_ok=True)
+app.mount("/avatars", StaticFiles(directory=AVATAR_DIR), name="avatars")
 
 
 @app.exception_handler(Exception)

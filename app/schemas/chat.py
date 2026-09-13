@@ -26,6 +26,8 @@ class HistoryResponse(BaseModel):
 class SessionListResponse(BaseModel):
     """会话 ID 列表"""
     sessions: list[str]
+    session_meta: dict[str, str] = {}   # 会话名 → 最后更新时间（YYYY-MM-DD HH:MM）
+    titles: dict[str, str] = {}         # 会话 ID → 显示标题（自动生成 / 手动重命名）
 
 
 class SessionActionResponse(BaseModel):

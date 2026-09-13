@@ -1,4 +1,25 @@
 import { marked } from 'marked'
+import hljs from 'highlight.js/lib/core'
+import bash from 'highlight.js/lib/languages/bash'
+import css from 'highlight.js/lib/languages/css'
+import java from 'highlight.js/lib/languages/java'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import markdown from 'highlight.js/lib/languages/markdown'
+import python from 'highlight.js/lib/languages/python'
+import sql from 'highlight.js/lib/languages/sql'
+import xml from 'highlight.js/lib/languages/xml'
+
+// 按需注册常用语言（控制打包体积）
+hljs.registerLanguage('bash', bash)
+hljs.registerLanguage('css', css)
+hljs.registerLanguage('java', java)
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('markdown', markdown)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('sql', sql)
+hljs.registerLanguage('xml', xml)
 
 /* GFM 表格贪婪吞行：LLM 流式输出常在两块内容间漏空行，marked 会把
    ① 相邻表格合并；② 表格后的无竖线说明文字吞进表格成为一行；③ 列表项后的表格嵌套进 <li>。
@@ -32,8 +53,33 @@ function normalizeTables(text) {
     return out.join('\n')
 }
 
+/* 代码块渲染：语法高亮 + 语言标签 + 复制按钮（按钮点击由 ChatArea 事件委托处理） */
+const renderer = new marked.Renderer()
+renderer.code = function (code, infostring) {
+    // marked v13+ 传入 ({ text, lang }) 对象；v12 及以前为 (code, infostring) 字符串
+    if (typeof code === 'object' && code !== null) {
+        infostring = code.lang
+        code = code.text
+    }
+    const lang = (infostring || '').trim().split(/\s+/)[0].toLowerCase()
+    let highlighted
+    if (lang && hljs.getLanguage(lang)) {
+        highlighted = hljs.highlight(code, { language: lang }).value
+    } else {
+        highlighted = hljs.highlightAuto(code).value
+    }
+    const label = (lang || 'text').replace(/[^a-z0-9+#.-]/g, '')
+    return (
+        '<div class="code-block">' +
+        `<div class="code-block-head"><span class="code-lang">${label}</span>` +
+        '<button class="code-copy-btn" type="button">复制</button></div>' +
+        `<pre><code class="hljs">${highlighted}</code></pre>` +
+        '</div>'
+    )
+}
+
 /** Markdown → HTML（breaks:true：LLM 常用单换行分段） */
 export function formatContent(text) {
     if (!text) return ''
-    return marked.parse(normalizeTables(text), { breaks: true })
+    return marked.parse(normalizeTables(text), { breaks: true, renderer })
 }

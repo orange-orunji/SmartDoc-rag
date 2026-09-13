@@ -97,6 +97,7 @@ async function sendMessage(question, sessionId) {
     const live = reactive({ role: 'assistant', content: '', tips: [], streaming: true })
     messages.value.push(live)
     isStreaming.value = true
+    const t0 = performance.now()
 
     try {
         const resp = await fetch('/api/chat/stream', {
@@ -118,6 +119,7 @@ async function sendMessage(question, sessionId) {
     } finally {
         live.streaming = false
         isStreaming.value = false
+        live.duration = (performance.now() - t0) / 1000   // 回答耗时（前端计时）
     }
 }
 
@@ -133,6 +135,7 @@ async function sendResume(msg, decision, sessionId) {
     msg.approval.status = decision ? 'sending-confirm' : 'sending-cancel'
     isStreaming.value = true
     let again = false
+    const t0 = performance.now()
 
     try {
         const resp = await fetch('/api/chat/resume', {
@@ -157,6 +160,7 @@ async function sendResume(msg, decision, sessionId) {
     } finally {
         isStreaming.value = false
         awaitingApproval.value = again
+        msg.duration = (performance.now() - t0) / 1000   // 恢复流耗时
     }
 }
 

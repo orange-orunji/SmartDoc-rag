@@ -1,8 +1,10 @@
+import asyncio
 import hashlib
 import json
 import logging
 import os
 import time
+from datetime import datetime
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Request
@@ -13,6 +15,7 @@ from app.agent.agent import get_agent, get_checkpointer
 from app.api.auth import current_user_ctx
 from app.schemas.chat import ChatRequest, RenameRequest, HistoryResponse, SessionListResponse, SessionActionResponse ,ResumeRequest
 from app.services.history_service import get_file_chat_history
+from app.services.hyde import llm
 from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
 from app.utils.semantic_cache import semantic_cache
@@ -42,6 +45,54 @@ _ACTION_WORDS = ("删除", "删掉", "移除", "清理", "去掉", "上传", "�
 def _is_action_request(question:str) -> bool:
     """判断问题是否包含动作词"""
     return any(word in question for word in _ACTION_WORDS)
+
+# ── 会话标题（显示名，独立于 session_id 存储；重命名不影响 thread 记忆）──
+
+_TITLE_FILE = "_meta.json"
+
+
+def _load_titles(user_dir: str) -> dict:
+    path = os.path.join(user_dir, _TITLE_FILE)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_title(user_dir: str, session_id: str, title: str) -> None:
+    os.makedirs(user_dir, exist_ok=True)
+    titles = _load_titles(user_dir)
+    titles[session_id] = title
+    with open(os.path.join(user_dir, _TITLE_FILE), "w", encoding="utf-8") as f:
+        json.dump(titles, f, ensure_ascii=False)
+
+
+def _delete_title(user_dir: str, session_id: str) -> None:
+    titles = _load_titles(user_dir)
+    if session_id in titles:
+        titles.pop(session_id)
+        with open(os.path.join(user_dir, _TITLE_FILE), "w", encoding="utf-8") as f:
+            json.dump(titles, f, ensure_ascii=False)
+
+
+def _generate_session_title(question: str) -> str:
+    """用 LLM 生成简短会话标题（≤12 字）；失败时回退首句截断"""
+    try:
+        prompt = (
+            "请用不超过 12 个字概括下面用户请求的主题，作为对话标题。"
+            "直接输出标题本身，不要引号、句号或任何解释。\n\n"
+            f"用户请求：{question[:200]}"
+        )
+        title = llm.invoke(prompt).content.strip().strip('"“”‘’。，！？：')
+        if title:
+            return title[:20]
+    except Exception as e:
+        logger.warning("会话标题生成失败，回退截断 | err=%s", e)
+    return question[:12]
+
 """
 流式输出接口
 """
@@ -78,6 +129,8 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
         tool_times: dict[str, float] = {}  # 工具名 → 开始时间，用于统计耗时
         blocked = False
         chat_history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
+        user_dir = os.path.join(s.CHAT_HISTORY_STORAGY_PATH, user_id)
+        is_first_message = len(chat_history.messages) == 0   # 首条消息 → 触发自动标题
         logger.info("收到提问 | user=%s | session=%s | 问题=%s", user_id, body.session_id, body.question[:50])
         try:
             # chain = get_rag_chain(user_id)
@@ -167,6 +220,11 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                 history = chat_history
                 history.add_message(HumanMessage(content=body.question))
                 history.add_message(AIMessage(content=all_request))
+            # ★ 首条消息 → 自动生成会话标题（LLM 概述；失败回退首句截断）
+            if not blocked and is_first_message:
+                title = await asyncio.to_thread(_generate_session_title, body.question)
+                _save_title(user_dir, body.session_id, title)
+                logger.info("会话标题已生成 | session=%s | title=%s", body.session_id, title)
             logger.info("对话完成 | user=%s | 耗时=%.2fs | 输出帧=%d | 回复长度=%d | 工具调用=%d",
                         user_id, time.time() - t_start, frame_count, len(all_request), len(tool_times))
             yield "data: [DONE]\n\n"
@@ -193,15 +251,22 @@ async def get_user_sessions(current_user: dict = Depends(get_current_user)):
     user_dir = os.path.join(storage_path, user_id)
 
     if not os.path.exists(user_dir):
-        return {"sessions": []}
+        return {"sessions": [], "session_meta": {}, "titles": {}}
 
-    # 列出该目录下所有 .json 文件，提取会话 ID（去掉 .json 后缀）
+    # 列出该目录下所有 .json 文件，提取会话 ID（去掉 .json 后缀；_ 开头为元数据文件）
     sessions = [
         f.replace('.json', '')
         for f in os.listdir(user_dir)
-        if f.endswith('.json')
+        if f.endswith('.json') and not f.startswith('_')
     ]
-    return {"sessions": sessions}
+    # 会话最后更新时间（文件 mtime，供前端排序 / 时间分组）
+    session_meta = {
+        sid: datetime.fromtimestamp(
+            os.path.getmtime(os.path.join(user_dir, f"{sid}.json"))
+        ).strftime("%Y-%m-%d %H:%M")
+        for sid in sessions
+    }
+    return {"sessions": sessions, "session_meta": session_meta, "titles": _load_titles(user_dir)}
 
 
 @router.delete("/session/{session_id}", response_model=SessionActionResponse)
@@ -215,34 +280,21 @@ async def delete_session(session_id: str, current_user: dict = Depends(get_curre
         return {"code": 404, "message": "会话不存在"}
 
     os.remove(file_path)
-    await get_checkpointer().delete_thread(f"{user_id}_{session_id}")
+    await get_checkpointer().adelete_thread(f"{user_id}_{session_id}")
+    # 同步清理标题记录
+    _delete_title(os.path.join(storage_path, user_id), session_id)
     return {"code": 200, "message": f"会话 {session_id} 已删除"}
 
 
 @router.put("/session/{session_id}/rename", response_model=SessionActionResponse)
 async def rename_session(session_id: str, request: RenameRequest, current_user: dict = Depends(get_current_user)):
-    """重命名指定会话"""
+    """重命名会话标题（仅修改显示标题；session_id 与 thread 记忆不受影响）"""
     user_id = str(current_user["user_id"])
-    storage_path = s.CHAT_HISTORY_STORAGY_PATH
-    user_dir = os.path.join(storage_path, user_id)
-    old_path = os.path.join(user_dir, f"{session_id}.json")
+    user_dir = os.path.join(s.CHAT_HISTORY_STORAGY_PATH, user_id)
     new_name = request.new_name.strip()
 
-    new_path = os.path.join(user_dir, f"{new_name}.json")
-    if os.path.exists(new_path):
-        return {"code": 409, "message": "该名称已存在，请使用其他名称"}
-
-    # 确保用户目录存在
-    os.makedirs(user_dir, exist_ok=True)
-
-    if os.path.exists(old_path):
-        os.rename(old_path, new_path)
-    else:
-        # 新会话还没有文件，直接创建空文件
-        with open(new_path, "w", encoding="utf-8") as f:
-            json.dump([], f)
-
-    await get_checkpointer().delete_thread(f"{user_id}_{session_id}")
+    _save_title(user_dir, session_id, new_name)
+    logger.info("会话重命名 | user=%s | session=%s | 新标题=%s", user_id, session_id, new_name)
     return {"code": 200, "message": "重命名成功", "data": {"new_name": new_name}}
 
 @router.post("/resume")

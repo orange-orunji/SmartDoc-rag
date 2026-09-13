@@ -80,6 +80,7 @@ services:
       - ./app/data/storage:/app/app/data/storage
       - ./app/data/chat_history:/app/app/data/chat_history
       - ./app/data/report:/app/app/data/report
+      - ./app/data/avatars:/app/app/data/avatars
       - ./app/app.db:/app/app/app.db
     restart: unless-stopped
 

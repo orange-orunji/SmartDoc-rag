@@ -95,6 +95,7 @@ class settings(BaseSettings):
 
     # —— 下载路径 ——
     REPORT_FILE_PATH : str  = str(BASE_DIR / "app/data/report")
+    AVATAR_DIR: str = str(BASE_DIR / "app/data/avatars")    # 用户头像存储目录（/avatars 静态挂载）
 
     # —— 邮箱路径 ——
     SMTP_HOST: str         # QQ邮箱 / 企业邮箱

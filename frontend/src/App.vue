@@ -2,6 +2,7 @@
 import { useAuth } from './composables/useAuth'
 import LoginView from './views/LoginView.vue'
 import ChatView from './views/ChatView.vue'
+import ToastHost from './components/ToastHost.vue'
 
 const { authed } = useAuth()
 </script>
@@ -9,4 +10,5 @@ const { authed } = useAuth()
 <template>
     <LoginView v-if="!authed" />
     <ChatView v-else />
+    <ToastHost />
 </template>

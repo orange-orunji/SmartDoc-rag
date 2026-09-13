@@ -1,9 +1,26 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 // 模块级单例状态：所有组件共享同一份登录态（无需 Pinia）
 const token = ref(localStorage.getItem('access_token') || '')
 const username = ref(localStorage.getItem('user') || '')
 const authed = ref(!!token.value)
+
+// 用户资料（GET /api/auth/me 拉取；localStorage 缓存供首屏秒显）
+const displayName = ref(localStorage.getItem('display_name') || '')
+const avatarUrl = ref(localStorage.getItem('avatar') || '')
+const bio = ref(localStorage.getItem('bio') || '')
+
+/** 显示名：昵称优先，回退登录名 */
+const shownName = computed(() => displayName.value || username.value)
+
+function setProfileCache(dn, av, b) {
+    displayName.value = dn
+    avatarUrl.value = av
+    bio.value = b
+    localStorage.setItem('display_name', dn)
+    localStorage.setItem('avatar', av)
+    localStorage.setItem('bio', b)
+}
 
 function setAuth(t, u) {
     token.value = t
@@ -11,6 +28,8 @@ function setAuth(t, u) {
     authed.value = true
     localStorage.setItem('access_token', t)
     localStorage.setItem('user', u)
+    // 清空上一个账号的资料缓存（由 fetchProfile 重新拉取）
+    setProfileCache('', '', '')
 }
 
 function logout() {
@@ -19,6 +38,7 @@ function logout() {
     authed.value = false
     localStorage.removeItem('access_token')
     localStorage.removeItem('user')
+    setProfileCache('', '', '')
 }
 
 /** 登录/注册；模式由 mode 指定（'login' | 'register'） */
@@ -43,6 +63,62 @@ function authHeaders() {
     return token.value ? { Authorization: 'Bearer ' + token.value } : {}
 }
 
+// ── 用户资料 ──
+
+/** 拉取当前用户资料（登录后/进入聊天页时调用） */
+async function fetchProfile() {
+    try {
+        const resp = await fetch('/api/auth/me', { headers: authHeaders() })
+        if (!resp.ok) return
+        const data = await resp.json()
+        setProfileCache(data.display_name || '', data.avatar || '', data.bio || '')
+    } catch (err) {
+        console.warn('资料加载失败:', err)
+    }
+}
+
+/** 更新昵称与个性签名 */
+async function updateProfile({ display_name, bio: newBio }) {
+    const resp = await fetch('/api/auth/me', {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name, bio: newBio }),
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) throw new Error(data.detail || '保存失败')
+    setProfileCache(data.display_name || '', data.avatar || '', data.bio || '')
+}
+
+/** 上传头像（File 对象；不手动设置 Content-Type，由浏览器带 multipart boundary） */
+async function uploadAvatar(file) {
+    const form = new FormData()
+    form.append('file', file)
+    const resp = await fetch('/api/auth/me/avatar', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: form,
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) throw new Error(data.detail || '上传失败')
+    avatarUrl.value = data.avatar
+    localStorage.setItem('avatar', data.avatar)
+}
+
+/** 修改密码（需原密码验证） */
+async function changePassword(oldPassword, newPassword) {
+    const resp = await fetch('/api/auth/me/password', {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) throw new Error(data.detail || '修改失败')
+}
+
 export function useAuth() {
-    return { token, username, authed, setAuth, logout, loginOrRegister, authHeaders }
+    return {
+        token, username, authed, shownName, displayName, avatarUrl, bio,
+        setAuth, logout, loginOrRegister, authHeaders,
+        fetchProfile, updateProfile, uploadAvatar, changePassword,
+    }
 }
