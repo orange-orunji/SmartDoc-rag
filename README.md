@@ -26,7 +26,7 @@
 ## 🧱 技术架构
 
 ```
-浏览器（HTML 单页前端） 
+浏览器（Vue 3 前端 · Vite 构建产物） 
 │ ▼ FastAPI 服务（单进程托管 API + 静态资源） 
 ├── JWT 认证 → SQLite 用户存储 
 ├── SSE 流式对话
@@ -54,7 +54,7 @@
 └── 对话历史持久化（JSON 文件按用户/会话隔离）
 ```
 
-> 前端为纯 HTML/CSS/JS 单页应用，由 FastAPI 直接托管，无需额外进程。
+> 前端为 Vue 3 + Vite 单页应用（组件化拆分 + 响应式数据驱动），构建产物由 FastAPI 直接托管，无需额外进程；未构建时自动回退旧 HTML 前端（`app/static/`）。
 
 ### 🔍 检索链路
 
@@ -117,7 +117,7 @@ sequenceDiagram
 - **会话管理**：新建、切换、重命名、删除会话，每个会话独立保持上下文
 - **查询意图路由器**：三层漏斗路由（正则精确标记 → 语料 IDF 稀有词信号 → 默认语义），300 题评测下语义组 75.3% / 精确组 86.0% 正确分流，检索层 Recall@1 59.67% 反超全量混合基线 2pp
 - **量化评估体系**：内置 Recall@K、MRR 自动化评测脚本与 300 条分类评测集（semantic/keyword 各 150），支持多种检索策略对比与路由阈值校准
-- **纯 HTML 单页前端**：零依赖浏览器端渲染，由 FastAPI 内置托管，无需前端框架或额外进程
+- **Vue 3 组件化前端**：Vue 3 + Vite 构建，登录/会话/聊天/审批卡片组件化拆分 + composables 状态管理（useAuth / useSessions / useMessages）；响应式数据驱动渲染（流式消息与审批状态机单一数据源），SSE 打字机 + Markdown 实时渲染等价移植；构建产物由 FastAPI 托管（旧 HTML 前端保底回退），开发期 Vite 热更新 + /api 代理联调
 
 ## 📊 检索策略对比（Top-1 召回率）
 
@@ -194,11 +194,21 @@ RAG_Personal/
 │   │   ├── storage/                  # ChromaDB + MD5 记录
 │   │   ├── chat_history/             # 对话历史文件
 │   │   └── report/                   # 生成的报告文件
-│   ├── static/index.html            # HTML 前端
+│   ├── static/index.html            # 旧 HTML 前端（Vue 未构建时保底回退）
 │   ├── eval_retrieval.py            # 检索评测（Recall@K / MRR）
 │   ├── eval_router.py               # 路由器意图判定校准
 │   ├── eval_questions.json          # 300 条分类评测集
 │   └── worker.py                    # 独立 Worker（可选）
+├── frontend/                         # Vue 3 前端（Vite 构建）
+│   ├── src/
+│   │   ├── App.vue                  # 登录页 ⇄ 聊天页
+│   │   ├── views/                   # LoginView / ChatView
+│   │   ├── components/              # Sidebar / ChatArea / ApprovalCard
+│   │   ├── composables/             # useAuth / useSessions / useMessages（状态与 SSE 消费）
+│   │   ├── utils/format.js          # Markdown 渲染 + 表格规范化
+│   │   └── styles/style.css         # 设计系统（原 CSS 整体复用）
+│   ├── vite.config.js               # /api、/reports 代理到后端（dev 模式）
+│   └── package.json
 ├── models/bge-reranker-base/        # Reranker 模型
 ├── requirements.txt
 └── .env.example
@@ -277,9 +287,21 @@ python main.py
 python -m uvicorn main:app --host 127.0.0.1 --port 9000
 ```
 
-浏览器访问 `http://127.0.0.1:8000` 即可体验。
+浏览器访问 `http://127.0.0.1:8000` 即可体验（根路径默认加载 Vue 前端）。
 
-> **注意**：HTML 前端已内置于 FastAPI 中，无需额外启动 Streamlit。旧版 Streamlit 前端（`app/ui.py`）仍保留可用。
+> **注意**：Vue 构建产物（`frontend/dist`）由 FastAPI 自动托管；未构建时自动回退旧 HTML 前端（`app/static/`）。前端源码改动后需 `cd frontend && npm run build` 重新构建生效。旧版 Streamlit 前端（`app/ui.py`）仍保留可用。
+
+**前端开发模式（可选，热更新）**：
+
+```bash
+# 终端 1：后端
+python main.py
+
+# 终端 2：前端（Vite dev server：5173 端口，/api 与 /reports 自动代理到 8000）
+cd frontend
+npm install    # 首次
+npm run dev
+```
 
 ## 🐳 Docker 一键部署
 
@@ -304,12 +326,15 @@ docker compose up -d --build
 
 > 💡 说明：`docker-compose.yml` 已通过 `env_file` 注入你的 `.env`，API Key 无需重复配置；向量库、对话历史、会话记忆（checkpoints.db）、报告文件均通过 volume 持久化到宿主机 `app/data/`，容器重建不丢数据。
 
+> 🏗️ 镜像采用三阶段构建（frontend → builder → runtime）：前端在镜像内完成 `npm install && npm run build`（无需本地预先构建），依赖分层缓存加速重建。
+
 ## 🔧 常见问题
 
 | 问题 | 解决方法 |
 |------|---------|
 | 端口 8000 被占用 | `netstat -ano \| findstr :8000` 查看 PID，`taskkill /F /PID <号>` 释放 |
 | 页面加载不出来 | 确认已执行 `pip install aiofiles`，重启后端 |
+| 页面显示旧版界面 | 浏览器强刷（Ctrl+F5）；Vue 产物未构建时会回退旧 HTML 前端，执行 `cd frontend && npm run build` 后重启 |
 | 重命名会话失败 | 需先发送一条消息创建会话文件，或刷新页面后重试 |
 | RabbitMQ 连接失败 | 检查 vhost 用户权限是否为 `.*`（正则），不能只用 `*` |
 | 上传功能禁用（日志提示） | RabbitMQ 首次连接失败后需**重启后端**才能启用；运维顺序应为先启动 RabbitMQ / Redis，再启动后端 |
@@ -324,6 +349,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.11.0** | 2026-09-13 | 前端工程化升级：原生 HTML/JS 前端迁移至 **Vue 3 + Vite**（登录/会话/聊天/审批卡片组件化拆分 + composables 状态管理；SSE 流式消费与 Markdown 渲染等价移植）；FastAPI 托管构建产物（旧 HTML 前端保底回退）、Docker 三阶段构建（镜像内 npm build）、开发期 Vite 热更新代理；同步修复 slowapi ASGI 中间件对多块响应重复发送 http.response.start 的隐患（改装饰器模式，请求日志零异常）；历史消息 role 契约归一化（human → user）；托管链路实测全绿 |
 | **1.10.0** | 2026-09-13 | LangGraph 二期·人机协同审批（HITL）：`send_email` 工具内 interrupt（结构化 payload）→ SSE 中断帧 + 入口防呆拦截 + `/resume` 恢复接口 + `/pending` 待审批查询；前端审批卡片（确认/取消）+ 输入锁定 + 切会话/刷新全场景重建（UI 无状态、状态在 checkpointer）；验收（挂起/拒绝/通过/防呆/恢复）全绿，真邮件送达 |
 | **1.9.0** | 2026-09-12 | LangGraph 二期·Checkpointer 多轮记忆落地：`AsyncSqliteSaver` 接入 FastAPI lifespan（重启记忆不丢）、thread_id 按“用户+会话”隔离、历史注入割接增量模式、会话删除/重命名联动清理记忆；同步修复语义/ MD5 缓存未按会话隔离的跨会话复用缺陷；验收（多轮/隔离/删除联动/重启持久化）全绿 |
 | **1.8.6** | 2026-09-07 | 语义缓存白名单修复：动作指令（删除/上传/发送等 13 词）读侧拦截跳过缓存查找 + 工具调用轮写侧不写缓存（`not tool_times`），修复“删除指令命中缓存返回假成功”与“统计/检索回答状态陈旧”；冒烟 6/6 通过（同文删除两次均真实执行、删除后同文统计返回新状态、纯问答二次命中缓存正常） |
@@ -343,6 +369,10 @@ docker compose up -d --build
 | **1.0.0** | 2026-06-15 | 项目初始化：FastAPI + LangChain + Chroma + DashScope；文档上传与问答；Recall@K/MRR 评测；Streamlit 原型 |
 
 ### 🗺️ 路线图
+
+**前端工程化（✅ 已完成 2026-09-13）**
+
+> 原生 HTML/CSS/JS 单页前端迁移至 **Vue 3 + Vite**：组件化拆分（登录/侧栏/聊天/审批卡片）、composables 状态管理（useAuth / useSessions / useMessages）、响应式数据驱动渲染（流式消息与审批状态机单一数据源）；构建产物由 FastAPI 托管、旧前端保底回退；Docker 三阶段构建（镜像内 npm build）；开发期 Vite 热更新 + /api 代理联调。
 
 **LangGraph 迁移（一期 ✅ 已完成 2026-09-07，二期进行中）**
 
