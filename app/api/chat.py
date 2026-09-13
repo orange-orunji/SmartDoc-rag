@@ -7,10 +7,11 @@ import time
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Request
 from langchain_core.messages import HumanMessage, AIMessage
+from langgraph.types import  Command
 
 from app.agent.agent import get_agent, get_checkpointer
 from app.api.auth import current_user_ctx
-from app.schemas.chat import ChatRequest, RenameRequest, HistoryResponse, SessionListResponse, SessionActionResponse
+from app.schemas.chat import ChatRequest, RenameRequest, HistoryResponse, SessionListResponse, SessionActionResponse ,ResumeRequest
 from app.services.history_service import get_file_chat_history
 from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
@@ -243,3 +244,86 @@ async def rename_session(session_id: str, request: RenameRequest, current_user: 
 
     get_checkpointer().delete_thread(f"{user_id}_{session_id}")
     return {"code": 200, "message": "重命名成功", "data": {"new_name": new_name}}
+
+@router.post("/resume")
+@limiter.limit("10/minute")
+async def resume_interrupt(request:Request,resume_request: ResumeRequest, current_user: dict = Depends(get_current_user)):
+    user_id = str(current_user["user_id"])
+    body = resume_request
+    _config = {"configurable": {"thread_id": f"{user_id}_{body.session_id}"}}
+
+    async def event_stream():
+        t_start = time.time()
+        frame_count = 0          # 输出的文本帧数（近似 token 数）
+        all_request = ""
+        tool_times: dict[str,float] = {}
+        chat_history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
+        try:
+            # 1. 入口校验：没有中断 → 拒绝（与 /stream 的防呆互补
+            chain = get_agent()
+            snap = await chain.aget_state(_config)
+            if not any(task.interrupts for task in snap.tasks):
+                yield f"data: {_sse_encode('[无处理审批] 当前会话没有待确认的操作，请继续对话')}\n\n"
+                return
+        #     2. resume 流
+            async for event in chain.astream_events(
+                Command(resume=body.decision),
+                version="v2",
+                config=_config
+            ):
+                e = event["event"]
+                if e == "on_tool_start":
+                    # 工具调用提示（Agent 推理轮输出的 tool_calls 在这里触发）
+                    tool_name = event.get("name", "?")
+                    tool_input = str(event["data"].get("input", ""))[:80]
+                    tool_times[tool_name] = time.time()
+                    logger.info("工具调用开始 | tool=%s | 输入=%s", tool_name, tool_input)
+                    hint = f"[调用工具: {tool_name} | 输入: {tool_input}]"
+                    yield f"data: {_sse_encode(hint)}\n\n"
+                elif e == "on_chat_model_stream":
+                    # token 级文本流：中间轮 function calling 的 content 为空会被跳过，
+                    # 只有最终回答的文本会流出 → 打字机效果
+                    chunk = event["data"]["chunk"]
+                    content = chunk.content
+                    if isinstance(content, str):
+                        text = content
+                    elif isinstance(content, list):
+                        text = "".join(
+                            part.get("text", "") for part in content
+                            if isinstance(part, dict) and part.get("type") == "text"
+                        )
+                    else:
+                        text = ""
+                    if not text:
+                        continue
+                    all_request += text
+                    frame_count += 1
+                    yield f"data: {_sse_encode(text)}\n\n"
+                elif e == "on_tool_end":
+                    tool_name = event.get("name", "?")
+                    cost = time.time() - tool_times.get(tool_name, t_start)
+                    output = event["data"].get("output")
+                    logger.info("工具调用结束 | tool=%s | 耗时=%.2fs", tool_name, cost)
+                    if output and "[REPORT_FILE]" in str(output):
+                        filename = str(output).split("[REPORT_FILE]")[1].split("\n")[0]
+                        dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
+                        all_request += dl_html  # 持久化到历史
+                        yield f"data: {_sse_encode(dl_html)}\n\n"
+
+            # 组装中断帧，获取工具中的payload返回给前端
+            snap = await chain.aget_state(_config)
+            interrupts = [i for task in snap.tasks for i in task.interrupts]
+            if interrupts:
+                first = interrupts[0]
+                logger.info("检测到中断 | payload=%s", first.value)
+                frame = {"type":"interrupt","payload":first.value,"interrupt_id":first.id}
+                yield f"data: {json.dumps(frame,ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            logger.exception("恢复执行异常 | user=%s | type=%s | repr=%r", user_id, type(e).__name__, e)
+            yield f"data: {_sse_encode('【系统错误】'+str(e))}\n\n"
+        finally:
+            if all_request:
+                chat_history.add_message(AIMessage(content=all_request))
+            yield "data: [DONE]\n\n"
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

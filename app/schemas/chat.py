@@ -33,3 +33,8 @@ class SessionActionResponse(BaseModel):
     code: int
     message: str
     data: Optional[dict] = None
+
+class ResumeRequest(BaseModel):
+    """"""
+    session_id: str
+    decision: bool
