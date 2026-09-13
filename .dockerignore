@@ -32,3 +32,7 @@ docs/
 # ── 评测脚本 ──
 app/eval_retrieval.py
 app/eval_questions.json
+
+# ── 前端（镜像内由构建阶段产出）──
+frontend/node_modules/
+frontend/dist/
