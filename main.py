@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import asyncio
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from slowapi import _rate_limit_exceeded_handler
@@ -110,7 +110,7 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """请求日志：方法/路径/状态码/耗时（静态资源跳过，避免刷屏）"""
-    if request.url.path.startswith(("/static", "/reports")):
+    if request.url.path.startswith(("/static", "/assets", "/reports")):
         return await call_next(request)
     t0 = time.time()
     response = await call_next(request)
@@ -125,19 +125,29 @@ app.include_router(document_router, prefix="/api/document", tags=["上传文件�
 app.include_router(auth_router, prefix="/api/auth", tags=["用户登录注册相关接口"])
 
 
+# ── 前端托管：Vue 构建产物优先，未构建时回退旧 HTML 前端 ──
+VUE_DIST = BASE_DIR / "frontend/dist"
+VUE_READY = (VUE_DIST / "index.html").exists()
+
+if VUE_READY:
+    app.mount("/assets", StaticFiles(directory=str(VUE_DIST / "assets")), name="assets")
+
+
 @app.get("/")
-async def redirect_to_frontend():
-    """根路径重定向到前端页面"""
+async def index_page():
+    """根路径：Vue 前端（构建产物）优先；未构建时回退旧 HTML 前端"""
+    if VUE_READY:
+        return FileResponse(str(VUE_DIST / "index.html"))
     return RedirectResponse(url="/static/index.html")
 
 
-# 静态文件服务（HTML 前端）
-# ── 限流中间件 ──
+# 静态文件服务（旧 HTML 前端，保底回退）
+# ── 限流（装饰器模式：chat 路由经 @limiter.limit 分别控制）──
+# 注意：不挂 SlowAPIASGIMiddleware——其 send_wrapper 会对流式响应的每块 body
+# 重复发送 http.response.start，触发 uvicorn "Expected ASGI message" 错误。
 if cfg.RATE_LIMIT_ENABLED:
-    from slowapi.middleware import SlowAPIASGIMiddleware
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    app.add_middleware(SlowAPIASGIMiddleware)
 
 # ———— 挂载静态路由 —————
 app.mount("/static", StaticFiles(directory="app/static", html=True), name="static")
