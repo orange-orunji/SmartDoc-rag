@@ -215,7 +215,7 @@ async def delete_session(session_id: str, current_user: dict = Depends(get_curre
         return {"code": 404, "message": "会话不存在"}
 
     os.remove(file_path)
-    get_checkpointer().delete_thread(f"{user_id}_{session_id}")
+    await get_checkpointer().delete_thread(f"{user_id}_{session_id}")
     return {"code": 200, "message": f"会话 {session_id} 已删除"}
 
 
@@ -242,7 +242,7 @@ async def rename_session(session_id: str, request: RenameRequest, current_user: 
         with open(new_path, "w", encoding="utf-8") as f:
             json.dump([], f)
 
-    get_checkpointer().delete_thread(f"{user_id}_{session_id}")
+    await get_checkpointer().delete_thread(f"{user_id}_{session_id}")
     return {"code": 200, "message": "重命名成功", "data": {"new_name": new_name}}
 
 @router.post("/resume")

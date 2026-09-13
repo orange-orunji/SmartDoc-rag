@@ -14,6 +14,7 @@ let username = '';
 let currentSessionId = '';
 let messages = [];
 let isStreaming = false;
+let awaitingApproval = false;   // 待审批：中断挂起期间锁定输入
 
 /* ──────────────────────────
    初始化
@@ -166,6 +167,8 @@ async function loadSessions() {
 function createSession() {
     currentSessionId = username + '_' + newSessionSuffix();
     messages = [];
+    awaitingApproval = false;
+    unlockInput();
     renderMessages();
     loadSessions();
     updateHeaderSession();
@@ -175,6 +178,8 @@ async function switchSession(sessionId) {
     if (sessionId === currentSessionId) return;
     currentSessionId = sessionId;
     messages = [];
+    awaitingApproval = false;
+    unlockInput();
     renderMessages();
     await loadHistory();
     await loadSessions();
@@ -369,8 +374,172 @@ function handleInputKey(e) {
     }
 }
 
+/* 输入区锁定/解锁（待审批期间禁用） */
+function lockInput() {
+    document.getElementById('send-btn').disabled = true;
+    document.getElementById('chat-input').disabled = true;
+}
+
+function unlockInput() {
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('chat-input').disabled = false;
+    document.getElementById('chat-input').focus();
+}
+
+/** 消费 SSE 响应流：文本渲染进 bubble，工具提示独立展示，中断帧捕获返回
+ *  返回 { fullResponse, interrupt } —— interrupt 非空表示图已挂起等待审批 */
+async function consumeStream(resp, assistantDiv, bubble) {
+    let fullResponse = '';
+    let interrupt = null;
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    const handleFrame = (raw) => {
+        if (!raw || raw === '[DONE]') return;
+        let data;
+        try { data = JSON.parse(raw); } catch { data = raw; }
+
+        // 中断帧（JSON object）：捕获，交给上层渲染审批卡片，不并入文本
+        if (typeof data === 'object' && data !== null) {
+            if (data.type === 'interrupt') interrupt = data;
+            return;
+        }
+
+        // 工具调用提示：渲染为独立提示条，不并入回答文本
+        if (data.startsWith('[调用工具')) {
+            const tip = document.createElement('div');
+            tip.className = 'tool-call-tip';
+            tip.textContent = data;
+            assistantDiv.insertBefore(tip, bubble);
+            scrollToBottom();
+            return;
+        }
+
+        fullResponse += data;
+        bubble.innerHTML = formatContent(fullResponse);
+        scrollToBottom();
+    };
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            handleFrame(trimmed.slice(6));
+        }
+    }
+    if (buffer.trim().startsWith('data: ')) {
+        handleFrame(buffer.trim().slice(6));
+    }
+    return { fullResponse, interrupt };
+}
+
+/** 审批卡片：展示中断 payload，用户确认/取消后走 resume 恢复流 */
+function renderApprovalCard(interrupt, assistantDiv, bubble) {
+    const p = interrupt.payload || {};
+    awaitingApproval = true;
+    lockInput();
+
+    const card = document.createElement('div');
+    card.className = 'approval-card';
+
+    const title = document.createElement('div');
+    title.className = 'approval-card-title';
+    title.textContent = (p.to || p.subject) ? '📋 待确认操作 · 发送邮件' : '📋 待确认操作';
+    card.appendChild(title);
+
+    const addRow = (k, v) => {
+        if (v === undefined || v === null || v === '') return;
+        const row = document.createElement('div');
+        row.className = 'approval-card-row';
+        const kEl = document.createElement('span');
+        kEl.className = 'k';
+        kEl.textContent = k;
+        const vEl = document.createElement('span');
+        vEl.className = 'v';
+        vEl.textContent = v;
+        row.appendChild(kEl);
+        row.appendChild(vEl);
+        card.appendChild(row);
+    };
+    addRow('收件人', p.to);
+    addRow('主　题', p.subject);
+    addRow('正　文', p.body);
+    if (Array.isArray(p.attachment) && p.attachment.length) {
+        addRow('附　件', p.attachment.join('、'));
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'approval-card-actions';
+    const btnConfirm = document.createElement('button');
+    btnConfirm.className = 'approval-btn approval-btn-confirm';
+    btnConfirm.textContent = '确认发送';
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 'approval-btn approval-btn-cancel';
+    btnCancel.textContent = '取消';
+    actions.appendChild(btnConfirm);
+    actions.appendChild(btnCancel);
+    card.appendChild(actions);
+
+    const status = document.createElement('div');
+    status.className = 'approval-card-status';
+    card.appendChild(status);
+
+    btnConfirm.onclick = () => sendResume(true, status, btnConfirm, btnCancel, assistantDiv, bubble);
+    btnCancel.onclick = () => sendResume(false, status, btnConfirm, btnCancel, assistantDiv, bubble);
+
+    assistantDiv.appendChild(card);
+    scrollToBottom();
+}
+
+/** 提交审批决定 → 消费恢复流（可能再次中断，链式支持） */
+async function sendResume(decision, statusEl, btnConfirm, btnCancel, assistantDiv, bubble) {
+    btnConfirm.disabled = true;
+    btnCancel.disabled = true;
+    statusEl.textContent = decision ? '已确认，正在执行…' : '已取消，正在通知助手…';
+    isStreaming = true;
+
+    let interruptData = null;
+    try {
+        const resp = await fetch(API_BASE + '/api/chat/resume', {
+            method: 'POST',
+            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: currentSessionId, decision })
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || '请求失败');
+        }
+        const result = await consumeStream(resp, assistantDiv, bubble);
+        interruptData = result.interrupt;
+        if (result.fullResponse) {
+            messages.push({ role: 'assistant', content: result.fullResponse });
+        }
+        statusEl.textContent = decision ? '✓ 已确认发送' : '✓ 已取消发送';
+        statusEl.classList.add('done');
+    } catch (err) {
+        statusEl.textContent = '【错误】' + err.message;
+    } finally {
+        isStreaming = false;
+        scrollToBottom();
+    }
+
+    // 恢复流再次中断（未来多审批点）→ 继续渲染新卡片；否则解锁输入
+    awaitingApproval = false;
+    if (interruptData) {
+        renderApprovalCard(interruptData, assistantDiv, bubble);
+    } else {
+        unlockInput();
+    }
+}
+
 async function sendMessage() {
-    if (isStreaming) return;
+    if (isStreaming || awaitingApproval) return;
     const input = document.getElementById('chat-input');
     const question = input.value.trim();
     if (!question || !currentSessionId) return;
@@ -385,11 +554,9 @@ async function sendMessage() {
     const bubble = assistantDiv.querySelector('.msg-bubble');
 
     isStreaming = true;
-    document.getElementById('send-btn').disabled = true;
-    document.getElementById('chat-input').disabled = true;
+    lockInput();
 
-    let fullResponse = '';
-
+    let interruptData = null;
     try {
         const resp = await fetch(API_BASE + '/api/chat/stream', {
             method: 'POST',
@@ -402,80 +569,25 @@ async function sendMessage() {
             throw new Error(err.detail || '请求失败');
         }
 
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-                const raw = trimmed.slice(6);
-                if (raw === '[DONE]') continue;
-
-                let data;
-                try { data = JSON.parse(raw); } catch { data = raw; }
-
-                // 中断帧（JSON object）：审批中断通知，暂存待后续处理（二期-3 渲染审批卡片）
-                if (typeof data === 'object' && data !== null) {
-                    console.log('[interrupt 帧]', data);
-                    window.__pendingInterrupt = data;
-                    continue;
-                }
-
-                // 工具调用提示：渲染为独立提示条，不并入回答文本
-                if (data.startsWith('[调用工具')) {
-                    const tip = document.createElement('div');
-                    tip.className = 'tool-call-tip';
-                    tip.textContent = data;
-                    assistantDiv.insertBefore(tip, bubble);
-                    scrollToBottom();
-                    continue;
-                }
-
-                fullResponse += data;
-                bubble.innerHTML = formatContent(fullResponse);
-                scrollToBottom();
-            }
+        const result = await consumeStream(resp, assistantDiv, bubble);
+        interruptData = result.interrupt;
+        if (result.fullResponse) {
+            messages.push({ role: 'assistant', content: result.fullResponse });
         }
-
-        if (buffer.trim()) {
-            const remaining = buffer.trim();
-            if (remaining.startsWith('data: ') && remaining.slice(6) !== '[DONE]') {
-                const raw = remaining.slice(6);
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (typeof parsed === 'object' && parsed !== null) {
-                        console.log('[interrupt 帧]', parsed);
-                        window.__pendingInterrupt = parsed;
-                    } else {
-                        fullResponse += parsed;
-                    }
-                } catch { fullResponse += raw; }
-            }
-        }
-
     } catch (err) {
         bubble.textContent = '【错误】' + err.message;
         bubble.style.color = 'var(--danger)';
     } finally {
-        if (fullResponse) {
-            messages.push({ role: 'assistant', content: fullResponse });
-        }
         isStreaming = false;
-        document.getElementById('send-btn').disabled = false;
-        document.getElementById('chat-input').disabled = false;
-        document.getElementById('chat-input').focus();
         bubble.style.color = '';
         scrollToBottom();
+    }
+
+    // 流结束后若遇到审批中断 → 渲染卡片并锁定输入（等用户决定）
+    if (interruptData) {
+        renderApprovalCard(interruptData, assistantDiv, bubble);
+    } else {
+        unlockInput();
     }
 }
 
