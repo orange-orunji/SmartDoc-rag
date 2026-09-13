@@ -327,3 +327,18 @@ async def resume_interrupt(request:Request,resume_request: ResumeRequest, curren
                 chat_history.add_message(AIMessage(content=all_request))
             yield "data: [DONE]\n\n"
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+@router.post("/pending/{session_id}")
+async def check_pending(session_id: str,current_user: dict = Depends(get_current_user)):
+    """检查待处理"""
+    user_id = str(current_user["user_id"])
+    _config = {"configurable": {"thread_id": f"{user_id}_{session_id}"}}
+    chain = get_agent()
+    snap = await chain.aget_state(_config)
+    interrupts = [i for task in snap.tasks for i in task.interrupts]
+    if interrupts:
+        first = interrupts[0]
+        logger.info("检测到中断 | payload=%s", first.value)
+        return {"interrupt": {"type": "interrupt", "payload": first.value, "interrupt_id": first.id}}
+    else :
+        return {"interrupt": None}

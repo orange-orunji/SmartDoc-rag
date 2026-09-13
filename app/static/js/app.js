@@ -120,6 +120,7 @@ async function showChatPage() {
     await loadSessions();
     await loadHistory();
     updateHeaderSession();
+    await checkPendingInterrupt();
 }
 
 function newSessionSuffix() {
@@ -184,6 +185,7 @@ async function switchSession(sessionId) {
     await loadHistory();
     await loadSessions();
     updateHeaderSession();
+    await checkPendingInterrupt();
 }
 
 async function deleteSession(sessionId) {
@@ -495,6 +497,37 @@ function renderApprovalCard(interrupt, assistantDiv, bubble) {
 
     assistantDiv.appendChild(card);
     scrollToBottom();
+}
+
+/** 查询当前会话是否有待审批中断；有则重建审批卡片（覆盖切会话/刷新页面/换设备场景） */
+async function checkPendingInterrupt() {
+    if (!currentSessionId || !token) return;
+    try {
+        const resp = await fetch(API_BASE + '/api/chat/pending/' + encodeURIComponent(currentSessionId), {
+            method: 'POST',
+            headers: authHeaders()
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data.interrupt) return;   // 无待审批 → 不做事（输入保持解锁）
+
+        const container = document.getElementById('chat-messages');
+        const empty = container.querySelector('.empty-state');
+        if (empty) empty.remove();
+
+        // 重建一个助手气泡容器（占位文案会被恢复流的文本覆盖）+ 卡片
+        const div = document.createElement('div');
+        div.className = 'message assistant';
+        div.innerHTML = '<div class="msg-role">助手</div><div class="msg-bubble">⏳ 等待您的审批确认…</div>';
+        container.appendChild(div);
+        const bubble = div.querySelector('.msg-bubble');
+
+        renderApprovalCard(data.interrupt, div, bubble);   // 内部会锁定输入
+        scrollToBottom();
+    } catch (err) {
+        // 查询失败不阻断会话加载；用户发消息时后端防呆仍会兜底拦截
+        console.warn('pending 查询失败:', err);
+    }
 }
 
 /** 提交审批决定 → 消费恢复流（可能再次中断，链式支持） */
