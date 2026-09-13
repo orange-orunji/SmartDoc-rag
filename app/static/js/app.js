@@ -424,6 +424,13 @@ async function sendMessage() {
                 let data;
                 try { data = JSON.parse(raw); } catch { data = raw; }
 
+                // 中断帧（JSON object）：审批中断通知，暂存待后续处理（二期-3 渲染审批卡片）
+                if (typeof data === 'object' && data !== null) {
+                    console.log('[interrupt 帧]', data);
+                    window.__pendingInterrupt = data;
+                    continue;
+                }
+
                 // 工具调用提示：渲染为独立提示条，不并入回答文本
                 if (data.startsWith('[调用工具')) {
                     const tip = document.createElement('div');
@@ -444,7 +451,15 @@ async function sendMessage() {
             const remaining = buffer.trim();
             if (remaining.startsWith('data: ') && remaining.slice(6) !== '[DONE]') {
                 const raw = remaining.slice(6);
-                try { fullResponse += JSON.parse(raw); } catch { fullResponse += raw; }
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        console.log('[interrupt 帧]', parsed);
+                        window.__pendingInterrupt = parsed;
+                    } else {
+                        fullResponse += parsed;
+                    }
+                } catch { fullResponse += raw; }
             }
         }
 

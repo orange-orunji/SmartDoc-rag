@@ -75,6 +75,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
         all_request = ""
         frame_count = 0          # 输出的文本帧数（近似 token 数）
         tool_times: dict[str, float] = {}  # 工具名 → 开始时间，用于统计耗时
+        blocked = False
         chat_history = get_file_chat_history(user_id=user_id, session_id=body.session_id)
         logger.info("收到提问 | user=%s | session=%s | 问题=%s", user_id, body.session_id, body.question[:50])
         try:
@@ -85,6 +86,16 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             # 注入配置参数，指定 thread_id
             _config = {"configurable": {"thread_id": f"{user_id}_{body.session_id}"}}
 
+            # ★ 入口防呆：该会话挂着待审批中断吗？（新增在流循环之前）
+            snap0 = await chain.aget_state(_config)
+            if any(task.interrupts for task in snap0.tasks):
+                logger.info("会话存在待处理中断，新消息已拦截 | user=%s | session=%s",
+                            user_id, body.session_id)
+                yield f"data: {_sse_encode('[待处理审批] 当前会话有待确认的操作，请先完成审批后再继续对话')}\n\n"
+                blocked = True
+                return  # 不进图；finally 仍会执行
+
+            # 流式生成
             async for event in chain.astream_events(
                 {"messages": [("user", body.question)]},
                 version="v2",
@@ -129,8 +140,18 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                         dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
                         all_request += dl_html  # 持久化到历史
                         yield f"data: {_sse_encode(dl_html)}\n\n"
+
+            # 组装中断帧，获取工具中的payload返回给前端
+            snap = await chain.aget_state(_config)
+            interrupts = [i for task in snap.tasks for i in task.interrupts]
+            if interrupts:
+                first = interrupts[0]
+                logger.info("检测到中断 | payload=%s", first.value)
+                frame = {"type":"interrupt","payload":first.value,"interrupt_id":first.id}
+                yield f"data: {json.dumps(frame, ensure_ascii=False)}\n\n"
+
         except Exception as e:
-            logger.exception("流式对话异常 | user_id=%s", user_id)
+            logger.exception("流式对话异常 | user=%s | type=%s | repr=%r", user_id, type(e).__name__, e)
             if s.is_production:
                 yield f"data: {_sse_encode('【系统错误】服务暂时不可用，请稍后重试')}\n\n"
             else:
@@ -141,9 +162,10 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                 user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
                 redis.setex(name=user_key, value=all_request, time=s.REDIS_EXPIRE)
                 semantic_cache.store(body.question, user_id, all_request)
-            history = chat_history
-            history.add_message(HumanMessage(content=body.question))
-            history.add_message(AIMessage(content=all_request))
+            if not blocked:
+                history = chat_history
+                history.add_message(HumanMessage(content=body.question))
+                history.add_message(AIMessage(content=all_request))
             logger.info("对话完成 | user=%s | 耗时=%.2fs | 输出帧=%d | 回复长度=%d | 工具调用=%d",
                         user_id, time.time() - t_start, frame_count, len(all_request), len(tool_times))
             yield "data: [DONE]\n\n"
