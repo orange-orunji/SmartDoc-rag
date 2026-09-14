@@ -5,6 +5,8 @@ import logging
 import os
 import time
 from datetime import datetime
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, Request
@@ -20,8 +22,7 @@ from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
 from app.utils.semantic_cache import semantic_cache
 from app.config.settings import get_settings
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.agent.agent import _ACTION_WORDS
 
 logger = logging.getLogger("rag.chat")
 limiter = Limiter(key_func=get_remote_address)
@@ -39,8 +40,6 @@ def _sse_encode(text: str) -> str:
     """
     return json.dumps(text, ensure_ascii=False)
 
-_ACTION_WORDS = ("删除", "删掉", "移除", "清理", "去掉", "上传", "存入",
-                 "入库", "保存", "发送", "发邮件", "生成报告", "导出")
 
 def _is_action_request(question:str) -> bool:
     """判断问题是否包含动作词"""

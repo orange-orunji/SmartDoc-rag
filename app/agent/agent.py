@@ -1,9 +1,13 @@
-from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import SystemMessage
+from langgraph.graph import StateGraph, MessagesState ,START , END
+from langgraph.prebuilt import  ToolNode
 from langchain_openai import ChatOpenAI
 from functools import lru_cache
-from langgraph.checkpoint.memory import InMemorySaver
+
+import re
 
 from app.config.settings import get_settings
+from app.services.hyde import adaptive_retrieve
 from app.services.tools.upload_tool import upload_document
 from app.services.tools.status_tool import get_document_status,generate_report,convert_format,send_email
 from app.services.tools.search_tool import search_knowledge_base
@@ -25,11 +29,11 @@ _llm = ChatOpenAI(
             base_url=s.SILICON_BASE_URL,
             streaming=True,
             callbacks=[],
-        )
+        ).bind_tools(_tools)
 
 _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传的文档中查找信息。
 ## 核心原则（必须严格遵守）
-**所有用户提问，默认先调用 search_knowledge_base 检索知识库，再基于检索结果回答。**
+**所有用户提问，若已有【知识库检索结果】上下文，直接基于它回答；仅当上下文不足以回答时，才调用 search_knowledge_base 补充。**
 不得未经检索就直接凭训练知识回答。
 
 ## 唯一例外（可以不调 search_knowledge_base）
@@ -55,7 +59,15 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 """
 
 _checkpointer = None
-
+_GREET_WORDS = ["你好","hello","hi","谢谢","你是谁"]
+_ACTION_WORDS = ["删除", "删掉", "移除", "清理", "去掉", "上传", "存入",
+                 "入库", "保存", "导出", "有哪些文档", "多少文档","多少个文档","文档数"]
+_ACTION_PATTERNS = [
+    r"发.{0,3}邮件",
+    r"生成.{0,3}报告",
+    r"转.{0,3}(Word|word|格式)",
+    r"发{0,3}邮件"
+]
 # 注入检查点，用于保存中间状态，防止无状态的图被缓存
 def set_checkpointer(cp):
     global _checkpointer
@@ -64,9 +76,53 @@ def set_checkpointer(cp):
 def get_checkpointer():
     return _checkpointer
 
+class AgentState(MessagesState):
+    retrieval_context: str = ""
+
+
+def router(state: AgentState) -> str:
+    q = str(state["messages"][-1].content)
+    if any(k in q for k in _GREET_WORDS):
+        return "skip"
+    if any(k in q for k in _ACTION_WORDS) or \
+       any(re.search(p,q) for p in _ACTION_PATTERNS):  # 动作类 → skip
+        return "skip"
+    return "retrieve"
+
+def retrieve(state: AgentState) -> dict:
+    question = state["messages"][-1].content
+    docs = adaptive_retrieve(question)
+    docs_text =  "\n\n".join(
+        f"【来源: {d.metadata.get('source')} \n{d.page_content}】" for d in docs
+    )
+    return {"retrieval_context": docs_text}
+
+
+async def call_model(state: AgentState) -> dict:
+    system = _SYSTEM_PROMPT
+    ctx = state.get("retrieval_context","")
+    if ctx:
+        system += f"\n\n【知识库检索结果】\n{ctx}"
+    msgs = [SystemMessage(content=system)] + state["messages"]
+    response = await _llm.ainvoke(msgs)
+    return {"messages": [response]}
+
+
+def continues(state: AgentState) -> str:
+    last = state["messages"][-1]
+    return "tools" if getattr(last, "tool_calls", None) else "END"
+
 @lru_cache(maxsize=None)
 def get_agent():
-    return create_react_agent(model=_llm,
-                              tools=_tools,
-                              prompt=_SYSTEM_PROMPT ,
-                              checkpointer=get_checkpointer())
+    builder = StateGraph(AgentState)
+
+    builder.add_node("retrieve", retrieve)
+    builder.add_node("agent",call_model)
+    builder.add_node("tools",ToolNode(_tools))
+
+    builder.add_conditional_edges(START, router , {"retrieve": "retrieve", "skip": "agent"})
+    builder.add_edge("retrieve","agent")
+    builder.add_conditional_edges("agent",continues,{"tools":"tools","END":END})
+    builder.add_edge("tools","agent")
+
+    return builder.compile(checkpointer=_checkpointer)
