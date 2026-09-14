@@ -61,12 +61,12 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 _checkpointer = None
 _GREET_WORDS = ["你好","hello","hi","谢谢","你是谁"]
 _ACTION_WORDS = ["删除", "删掉", "移除", "清理", "去掉", "上传", "存入",
-                 "入库", "保存", "导出", "有哪些文档", "多少文档","多少个文档","文档数"]
+                 "入库", "保存", "导出", "有哪些文档", "多少文档","多少个文档","文档数",
+                 "帮我发送这份报告", "帮我统计一下"]
 _ACTION_PATTERNS = [
     r"发.{0,3}邮件",
     r"生成.{0,3}报告",
     r"转.{0,3}(Word|word|格式)",
-    r"发{0,3}邮件"
 ]
 # 注入检查点，用于保存中间状态，防止无状态的图被缓存
 def set_checkpointer(cp):
@@ -93,7 +93,7 @@ def retrieve(state: AgentState) -> dict:
     question = state["messages"][-1].content
     docs = adaptive_retrieve(question)
     docs_text =  "\n\n".join(
-        f"【来源: {d.metadata.get('source')} \n{d.page_content}】" for d in docs
+        f"【来源: {d.metadata.get('source')}】\n{d.page_content}" for d in docs
     )
     return {"retrieval_context": docs_text}
 
