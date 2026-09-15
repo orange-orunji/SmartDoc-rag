@@ -53,3 +53,5 @@ python-docx~=1.2.0
 # ── 认证 / JWT ───────────────────────────────────────────
 python-jose[cryptography]~=3.5.0
 passlib~=1.7.4            # 密码哈希仅用 pbkdf2_sha256，无需 [bcrypt] extra
+
+httpx

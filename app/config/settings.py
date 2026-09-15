@@ -33,6 +33,9 @@ class settings(BaseSettings):
     SILICON_API_KEY: str
     SILICON_BASE_URL: str = "https://api.deepseek.com"
     SILICON_MODEL: str = "deepseek-flash"
+
+    # —— 联网搜索（博查 Bocha，二期 web_search 用）——
+    BOCHA_API_KEY: str = ""
     DASHSCOPE_API_KEY: str = ""
 
     # ── Embedding 配置（DashScope OpenAI 兼容接口）──
