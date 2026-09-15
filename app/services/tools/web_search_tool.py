@@ -23,7 +23,7 @@ def search_web(query: str, count: int = 5) -> str:
             err = data.get("message") or data.get("msg") or "未知错误"
             return f"联网搜索失败：{err}"
         # ② 取网页列表：链式 .get 必须带默认 {}，最后 or [] 兜底
-        pages = data.get("data",{}).get("webPages",{}).get("value",{}) or []
+        pages = data.get("data",{}).get("webPages",{}).get("value",[])
         # ③ 空判断放在格式化【之前】——名字也叫对了（pages 是列表）
         if not pages:
             return "联网搜索无相关结果"
@@ -43,7 +43,9 @@ def search_web(query: str, count: int = 5) -> str:
 
 @tool
 def web_search(query: str) -> str:
-    """（docstring 你写——参照 search_tool.py 的规范：适用场景 / 不适用场景 都要写）
-    提示：适用=时效性/实时信息（今天/最新/最近）；不适用=知识库已有答案的问题/闲聊
+    """联网搜索实时信息（博查），返回带 URL 的网页摘要。
+
+    适用场景：时效性问题（"今天/最新/最近/今年/现在"）、知识库检索为空且需要外部信息时。
+    不适用场景：知识库已有答案的问题（应先查知识库）、纯闲聊、数学计算。
     """
     return search_web(query)

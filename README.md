@@ -30,7 +30,8 @@
 │ ▼ FastAPI 服务（单进程托管 API + 静态资源） 
 ├── JWT 认证 → SQLite 用户存储 
 ├── SSE 流式对话
-│   ├── 🤖 Agent 智能体（主路径）─ LangGraph create_react_agent
+│   ├── 🤖 Agent 智能体（主路径）─ LangGraph 自定义 StateGraph
+│   │   ├── 🧭 图编排 ─ 三分类路由 → 前置检索（质量阈值）→ 联网兜底 → ReAct 工具循环
 │   │   ├── search_knowledge_base ─ HyDE + 向量 + BM25 + Rerank 全流程检索
 │   │   ├── upload_document ─ 文档内容异步入库（RabbitMQ）
 │   │   ├── delete_document ─ 文档删除（Chroma/MD5/BM25 联动清理）
@@ -69,8 +70,11 @@ graph LR
     Jieba --> BM25[BM25 关键词召回]
     Vec --> Rerank[BGE-Reranker 重排序]
     BM25 --> Rerank
-    Rerank --> Top3[Top-3 上下文]
+    Rerank --> ScoreCheck{分数 ≥ 0.1?}
+    ScoreCheck -->|是| Top3[Top-3 上下文]
+    ScoreCheck -->|否| Web[联网兜底（博查 web_search）]
     Top3 --> LLM[LLM 生成回答]
+    Web --> LLM
     LLM --> Store[写入双层缓存]
 ```
 
@@ -113,6 +117,8 @@ sequenceDiagram
 - **来源引用（可解释 AI）**：检索片段注入【来源：文件名】头 + Prompt 引用标注要求，回答句末标注来源并列出引用来源，来源由检索层保证而非模型凭空编造
 - **多轮对话记忆（LangGraph Checkpointer）**：Checkpointer + AsyncSqliteSaver 接管会话记忆并持久化（重启不丢），thread_id 按“用户+会话”隔离；历史注入重构为增量模式（防重复），会话删除/重命名与会话记忆联动清理
 - **敏感操作人工审批（Human-in-the-loop）**：`send_email` 等敏感工具执行前 interrupt 中断（结构化 payload 审批卡）；待审批期间新消息被入口防呆拦截、输入区锁定；审批状态持久化于 checkpointer，切会话/刷新/换设备均可恢复卡片；确认/取消后 resume 恢复执行
+- **检索前置硬约束（自定义 StateGraph）**：Agent 从预置 `create_react_agent` 重构为自定义 `StateGraph`——“先检索知识库”由 Prompt 规则升级为**图的必经节点**（三分类路由：寒暄/动作类跳过，其余默认强制）；Rerank 质量阈值（≥0.1，数据实测：相关 ≥0.42 / 不相关 0.00）过滤低质结果；知识类问题检索覆盖率 100%，动作类请求耗时降低 86%（10.8s → 1.5s）
+- **联网搜索兜底（web_search）**：本地检索质量不足（Rerank 分数 < 0.1）时条件边自动切换博查联网搜索，回答标注【网页：标题】URL + 发布日期；reset 入口节点保证上下文每轮重置（防跨轮残留）；知识库/联网/通用知识三级标注体系清晰可追溯
 - **多用户认证与隔离**：JWT 认证 + HTTP Bearer Token，用户数据完全物理隔离
 - **会话管理**：新建、切换、重命名、删除会话，每个会话独立保持上下文
 - **查询意图路由器**：三层漏斗路由（正则精确标记 → 语料 IDF 稀有词信号 → 默认语义），300 题评测下语义组 75.3% / 精确组 86.0% 正确分流，检索层 Recall@1 59.67% 反超全量混合基线 2pp
@@ -165,16 +171,18 @@ RAG_Personal/
 │   │   ├── chat.py                  # SSE 流式对话、会话管理、人工审批（resume/pending）
 │   │   └── document.py              # 文档异步上传
 │   ├── agent/                       # Agent 智能体
-│   │   └── agent.py                 # Agent 定义 + 工具注册 + Prompt + Checkpointer 注入
+│   │   └── agent.py                 # 自定义 StateGraph（路由/前置检索/联网兜底）+ 工具注册 + Checkpointer 注入
 │   ├── services/                    # 业务层
 │   │   ├── tools/                   # Agent 工具集
 │   │   │   ├── status_tool.py       # 知识库统计 + 报告生成 + 格式转换 + 邮件发送
 │   │   │   ├── search_tool.py       # 知识库检索工具
+│   │   │   ├── delete_tool.py       # 文档删除工具
+│   │   │   ├── web_search_tool.py   # 联网搜索（博查；纯函数 + @tool 双层复用）
 │   │   │   └── upload_tool.py       # 文档上传工具
 │   │   ├── llm.py                   # RAG 链（LCEL）
 │   │   ├── hyde.py                  # HyDE 检索增强
 │   │   ├── bm25_service.py          # BM25 关键词索引
-│   │   ├── rerank.py                # BGE-Reranker 重排序
+│   │   ├── rerank.py                # BGE-Reranker 重排序（分数落 metadata，供质量阈值过滤）
 │   │   ├── vector_store.py          # Chroma 向量库
 │   │   ├── history_service.py       # 对话历史持久化
 │   │   ├── document.py              # 文件解析 + 校验
@@ -261,6 +269,9 @@ SMTP_HOST=smtp.qq.com
 SMTP_PORT=587
 SMTP_USER=你的QQ号@qq.com
 SMTP_PASSWORD=QQ邮箱授权码
+
+# 联网搜索（可选，使用联网兜底功能时需要；博查开放平台 bochaai.com）
+BOCHA_API_KEY=你的博查API_KEY
 ```
 
 ### 4. 启动 Redis（使用缓存功能时需要）
@@ -341,6 +352,7 @@ docker compose up -d --build
 | 文档上传后无响应 | 检查 RabbitMQ 是否运行，Redis 是否可连接（文件内容通过 Redis 传递） |
 | Redis 连接失败 | 缓存功能自动降级，不影响核心问答；启动 Redis 后重启服务即可启用 |
 | 邮件发送失败 | 检查 `.env` 中 SMTP 配置是否正确，QQ 邮箱需使用授权码而非登录密码 |
+| 联网搜索提示额度不足 | 博查开放平台检查套餐/额度；未配置 `BOCHA_API_KEY` 时自动跳过联网（不影响知识库问答） |
 | 报告下载按钮不显示 | 确保 `app/data/report/` 目录存在，重启服务后自动创建 |
 
 # 更新日志
@@ -349,6 +361,7 @@ docker compose up -d --build
 
 | 版本 | 日期         | 关键变更 |
 |------|------------|---------|
+| **1.12.0** | 2026-09-15 | LangGraph 二期收官·检索前置硬约束 + web_search 联网兜底：自定义 StateGraph 替换 create_react_agent——三分类路由（寒暄/动作类跳过）→ 检索为图必经节点（默认强制）→ ReAct 工具循环；Rerank 分数落 metadata + 质量阈值（0.1）过滤低质结果，检索不足自动切换博查联网搜索兜底（回答带网页 URL/日期标注）；reset 入口节点实现上下文每轮重置（防跨轮残留）；收益：知识问题检索覆盖 100%、动作类请求 10.8s→1.5s、统计类 12.2s→3.2s；验收（编译/联网兜底/知识命中/多轮残留/审批中断）全绿 |
 | **1.11.0** | 2026-09-13 | 前端工程化升级：原生 HTML/JS 前端迁移至 **Vue 3 + Vite**（登录/会话/聊天/审批卡片组件化拆分 + composables 状态管理；SSE 流式消费与 Markdown 渲染等价移植）；FastAPI 托管构建产物（旧 HTML 前端保底回退）、Docker 三阶段构建（镜像内 npm build）、开发期 Vite 热更新代理；同步修复 slowapi ASGI 中间件对多块响应重复发送 http.response.start 的隐患（改装饰器模式，请求日志零异常）；历史消息 role 契约归一化（human → user）；托管链路实测全绿 |
 | **1.10.0** | 2026-09-13 | LangGraph 二期·人机协同审批（HITL）：`send_email` 工具内 interrupt（结构化 payload）→ SSE 中断帧 + 入口防呆拦截 + `/resume` 恢复接口 + `/pending` 待审批查询；前端审批卡片（确认/取消）+ 输入锁定 + 切会话/刷新全场景重建（UI 无状态、状态在 checkpointer）；验收（挂起/拒绝/通过/防呆/恢复）全绿，真邮件送达 |
 | **1.9.0** | 2026-09-12 | LangGraph 二期·Checkpointer 多轮记忆落地：`AsyncSqliteSaver` 接入 FastAPI lifespan（重启记忆不丢）、thread_id 按“用户+会话”隔离、历史注入割接增量模式、会话删除/重命名联动清理记忆；同步修复语义/ MD5 缓存未按会话隔离的跨会话复用缺陷；验收（多轮/隔离/删除联动/重启持久化）全绿 |
@@ -374,20 +387,21 @@ docker compose up -d --build
 
 > 原生 HTML/CSS/JS 单页前端迁移至 **Vue 3 + Vite**：组件化拆分（登录/侧栏/聊天/审批卡片）、composables 状态管理（useAuth / useSessions / useMessages）、响应式数据驱动渲染（流式消息与审批状态机单一数据源）；构建产物由 FastAPI 托管、旧前端保底回退；Docker 三阶段构建（镜像内 npm build）；开发期 Vite 热更新 + /api 代理联调。
 
-**LangGraph 迁移（一期 ✅ 已完成 2026-09-07，二期进行中）**
+**LangGraph 迁移（一期 ✅ 2026-09-07 · 二期 ✅ 2026-09-15，全部完成）**
 
 > 一期成果：引入 `langgraph`，预置 `create_react_agent` 替换 `AgentExecutor`（复用 6 工具，系统提示词提取为顶格常量保证文本一致）；对话输入改 `messages` 约定；`astream_events` v1→v2 事件协议升级（消除弃用警告）；两轮冒烟验证（token 级流式 / 工具调用提示 / 多轮追问）7/7 通过。
 > 二期进展（2026-09-12）：**Checkpointer 多轮记忆 ✅ 已落地**——`AsyncSqliteSaver` 持久化（重启不丢）、thread_id 按用户+会话隔离、历史注入割接增量模式、会话删除/重命名联动清理；验收全绿，并顺带修复缓存跨会话复用缺陷。
 > 二期进展（2026-09-13）：**人机协同审批（HITL）✅ 已落地**——`send_email` 工具内 interrupt + SSE 中断帧协议 + 入口防呆拦截 + `/resume` 恢复接口 + `/pending` 待审批查询；前端审批卡片（确认/取消）+ 输入锁定 + 切会话/刷新全场景重建；验收全绿。
-> 二期待办：自定义 StateGraph 硬约束、web_search。
+> 二期进展（2026-09-14）：**自定义 StateGraph 硬约束 ✅ 已落地**——`create_react_agent` 重构为自定义 `StateGraph`：三分类路由（寒暄/动作类跳过）→ 检索为图必经节点 → ReAct 工具循环；Prompt 大幅精简；知识问题检索覆盖 100%、动作类请求 10.8s→1.5s。
+> 二期进展（2026-09-15）：**web_search 联网兜底 ✅ 已落地**——Rerank 分数落 metadata + 质量阈值（0.1）过滤低质结果，检索不足自动切换博查联网搜索；reset 入口节点防跨轮上下文残留；回答带网页 URL/日期标注；验收全绿。**二期四项（记忆/审批/硬约束/联网）全部完成。**
 
 | 阶段 | 整改内容 | 预期收益 |
 |------|---------|---------|
 | 一期 ✅ | 引入 `langgraph`，用预置 `create_react_agent` 替换 `AgentExecutor`，复用现有 6 个工具与系统提示词；输入改 `messages` 约定；事件流升级 v2 | 真·token 级流式输出，代码与 LangChain 官方主线对齐 |
 | 二期 ✅ | 用 Checkpointer 接管多轮记忆（thread_id 按用户+会话隔离），与现有 JSON 历史文件双写过渡，替代手工拼接历史文本（2026-09-12 完成，含重启持久化验收） | 多轮状态自动持久化，历史注入交给框架 |
-| 二期 | 自定义 StateGraph：将"必须先检索知识库"从 Prompt 规则升级为图结构硬约束（入口强制经过检索节点） | 检索流程由代码保证而非模型自觉，Prompt 大幅精简 |
+| 二期 ✅ | 自定义 StateGraph：将"必须先检索知识库"从 Prompt 规则升级为图结构硬约束（2026-09-14 完成，含三分类路由与质量阈值） | 检索流程由代码保证而非模型自觉，Prompt 大幅精简 |
 | 二期 ✅ | 敏感操作人机协同：`send_email` 等工具执行前 interrupt 中断，等待用户确认后恢复执行（2026-09-13 完成，含防呆/恢复验收） | 避免误发邮件，Agent 行为更可控 |
-| 二期 | 联网搜索 `web_search`：知识库检索为空且涉及时效性问题时兜底调用，条件边硬约束控制触发时机；回答标注"根据网络搜索：<来源URL>" | 时效性问题可回答；多源答案三级标注体系（知识库/网络/通用知识） |
+| 二期 ✅ | 联网搜索 `web_search`：检索质量不足（Rerank 分数 < 0.1）时条件边兜底调用博查搜索（2026-09-15 完成） | 时效性问题可回答；多源答案三级标注体系（知识库/网络/通用知识） |
 
 **近期计划：检索策略自适应（查询意图路由）**
 
@@ -421,21 +435,21 @@ docker compose up -d --build
 
 **近期工具扩展**
 
-> 选型原则：优先补产品缺口（生命周期/可解释性），拓展类与 LangGraph 二期一起做（条件边控制触发时机），避免单 Agent Prompt 过度膨胀（远期由 Supervisor 多 Agent 拆分承载）。
+> 选型原则：优先补产品缺口（生命周期/可解释性），拓展类按需排期（条件边控制触发时机），避免单 Agent Prompt 过度膨胀（远期由 Supervisor 多 Agent 拆分承载）。
 
 - 定时任务 `schedule_task`：支持"N 分钟后发邮件/生成报告"等延迟执行，基于 asyncio 内存级调度（方案 A 轻量版），后续按需升级 Redis 持久化
-- 联网搜索 `web_search`：已计入二期（见上方 LangGraph 迁移表），国内优先选博查（Bocha）中文搜索 API，海外选 Tavily；兜底式触发 + 条件边硬约束
+- 联网搜索 `web_search`：✅ 已落地（2026-09-15）——博查 API 接入，检索质量阈值（Rerank 分数 < 0.1）触发条件边兜底，回答带网页 URL/日期标注
 
 **补缺口**（✅ 已完成 2026-09-07）：
 
 - 文档删除 `delete_document`：Chroma 切片删除 + MD5 记录清理 + BM25 索引重建三处联动，删除后同内容文件可重新上传（生命周期闭环，冒烟 8/8 通过）
 - 来源引用 citation：检索结果注入【来源：文件名】头 + Prompt 引用标注要求，回答句末标注来源并列出引用（可解释 AI）
 
-**缓存一致性增强（待办，与二期一起做）**：
+**缓存一致性增强（待办）**：
 
 - `SemanticCache.invalidate(user_id)` 主动失效：`delete_document` / `upload_document` 执行成功后清除该用户的语义缓存，比动作词黑名单更彻底（当前读侧拦截 + 写侧不缓存已覆盖主路径，主动失效作为纵深防御）
 
-**拓展类（与二期 LangGraph 一起做）**：
+**拓展类（待排期）**：
 
 - 翻译 `translate`：纯 LLM 调用零外部依赖，与 `convert_format` 组合成"翻译 + 转格式"流水线
 - 网页抓取入库 `fetch_url`：给定 URL 抓取内容 → 复用 RabbitMQ 异步上传链路入知识库，与 `web_search` 组成"一进一出"信息闭环
@@ -444,7 +458,7 @@ docker compose up -d --build
 
 **可选（视精力而定）**：
 
-- 查询改写 Query Rewriting：多轮追问时用 LLM 补全指代后再检索，二期检索节点内实现
+- 查询改写 Query Rewriting：多轮追问时用 LLM 补全指代后再检索（检索节点内实现）
 - 图片理解 `image_understand`：需更换多模态模型（Qwen-VL 等）+ 前端支持图片上传
 - 图表生成 `generate_chart`：matplotlib 生成统计图，复用 SSE 下载链路推送
 - 知识库摘要聚合：跨文档主题聚合，需与 `generate_report` 区分定位（摘要=轻量回答 vs 报告=文件交付）

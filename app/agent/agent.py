@@ -12,6 +12,7 @@ from app.services.tools.upload_tool import upload_document
 from app.services.tools.status_tool import get_document_status,generate_report,convert_format,send_email
 from app.services.tools.search_tool import search_knowledge_base
 from app.services.tools.delete_tool import delete_document
+from app.services.tools.web_search_tool import search_web
 
 s = get_settings()
 _tools = [
@@ -49,6 +50,8 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 - 用户要求将文件/消息进行邮件发送调用 -> send_email
 - 用户要求删除文件 -> delete_document
 
+- 联网内容需标注:"联网网络搜索: <URL>"
+
 
 ## 回答要求
 - 检索到相关内容时：优先引用文档内容，标注"根据知识库文档："
@@ -68,6 +71,8 @@ _ACTION_PATTERNS = [
     r"生成.{0,3}报告",
     r"转.{0,3}(Word|word|格式)",
 ]
+_RETRIEVAL_MIN_SCORE = 0.1      # 前置检索质量阈值：低于此分视为"无有效结果"→ 联网兜底
+
 # 注入检查点，用于保存中间状态，防止无状态的图被缓存
 def set_checkpointer(cp):
     global _checkpointer
@@ -78,6 +83,7 @@ def get_checkpointer():
 
 class AgentState(MessagesState):
     retrieval_context: str = ""
+    web_context: str = ""
 
 
 def router(state: AgentState) -> str:
@@ -89,9 +95,16 @@ def router(state: AgentState) -> str:
         return "skip"
     return "retrieve"
 
+def check_retrieve_none_router(state: AgentState) -> str:
+    if state["retrieval_context"] == "":
+        return "web"
+    else:
+        return "agent"
+
 def retrieve(state: AgentState) -> dict:
     question = state["messages"][-1].content
     docs = adaptive_retrieve(question)
+    docs = [d for d in docs if d.metadata.get("rerank_score", 0.0) >= _RETRIEVAL_MIN_SCORE]
     docs_text =  "\n\n".join(
         f"【来源: {d.metadata.get('source')}】\n{d.page_content}" for d in docs
     )
@@ -103,25 +116,46 @@ async def call_model(state: AgentState) -> dict:
     ctx = state.get("retrieval_context","")
     if ctx:
         system += f"\n\n【知识库检索结果】\n{ctx}"
+    web = state.get("web_context", "")
+    if web:
+        system += f"\n\n【联网搜索结果】\n{web}"
     msgs = [SystemMessage(content=system)] + state["messages"]
     response = await _llm.ainvoke(msgs)
     return {"messages": [response]}
 
+def web_search_node(state: AgentState) -> dict:
+    q = str(state["messages"][-1].content)
+    text = search_web(q)
+    if text.startswith("联网搜索失败"):
+        return {}
+    return {
+        "web_context": text
+    }
 
 def continues(state: AgentState) -> str:
     last = state["messages"][-1]
     return "tools" if getattr(last, "tool_calls", None) else "END"
 
+# 重置状态
+def reset(state: AgentState) -> dict:
+    return {"retrieval_context": "", "web_context": ""}
+
+
 @lru_cache(maxsize=None)
 def get_agent():
     builder = StateGraph(AgentState)
 
+    builder.add_node("reset", reset)
+
     builder.add_node("retrieve", retrieve)
     builder.add_node("agent",call_model)
+    builder.add_node("web",web_search_node)
     builder.add_node("tools",ToolNode(_tools))
 
-    builder.add_conditional_edges(START, router , {"retrieve": "retrieve", "skip": "agent"})
-    builder.add_edge("retrieve","agent")
+    builder.add_edge(START, "reset")
+    builder.add_conditional_edges("reset", router , {"retrieve": "retrieve", "skip": "agent"})
+    builder.add_conditional_edges("retrieve",check_retrieve_none_router,{"web":"web" , "agent": "agent"})
+    builder.add_edge("web","agent")
     builder.add_conditional_edges("agent",continues,{"tools":"tools","END":END})
     builder.add_edge("tools","agent")
 

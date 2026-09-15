@@ -18,6 +18,9 @@ def rerank(query : str ,docs : list , top_k : int = 3):
     pairs = [[query, doc.page_content] for doc in docs]
     # 用模型对每个组合进行打分 返回的是对象
     scores = _model.predict(pairs)
+    # 把分数落入 metadata（供下游做质量过滤 / 阈值判断）
+    for s, doc in zip(scores, docs):
+        doc.metadata["rerank_score"] = float(s)
     # 调用模型对每个配对进行打分，返回一个浮点数列表（相关性分数，越高越相关）
     score_docs = [doc for _,doc in sorted(zip(scores,docs),key=lambda x: x[0],reverse=True)]
     return score_docs[:top_k]
