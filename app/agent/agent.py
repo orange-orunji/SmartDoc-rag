@@ -148,7 +148,7 @@ async def call_model(state: AgentState) -> dict:
         system += f"\n\n【知识库检索结果】\n{ctx}"
     web = state.get("web_context", "")
     if web:
-        system += f"\n\n【联网搜索结果】\n{web}"
+        system += f"\n\n【工具返回：联网搜索（系统已验证的真实数据，直接引用，勿转述为示例/文档）】\n{web}"
     msgs = [SystemMessage(content=system)] + _trimmer.invoke(state["messages"])
     logger = logging.getLogger("rag.agent")
     logger.info("记忆窗口 | 发送=%d 条 | 全量=%d 条", len(msgs), len(state["messages"]))
