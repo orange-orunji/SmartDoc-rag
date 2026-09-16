@@ -24,6 +24,7 @@ app/data/logs/
 app/data/avatars/
 app/data/checkpoints.db
 app/eval_checkpoint.json
+app/eval_agent_checkpoint.json
 app.db
 *.db-shm
 *.db-wal

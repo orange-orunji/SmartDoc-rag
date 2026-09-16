@@ -1,0 +1,92 @@
+[
+  {
+    "q": "AI 工程化面试需要准备哪些方向？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["面试", "算法"] }
+  },
+  {
+    "q": "Redis 缓存穿透和缓存雪崩怎么解决？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["缓存", "布隆"] }
+  },
+  {
+    "q": "关于爱情的文档里说了什么？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["爱情", "亲密"] }
+  },
+  {
+    "q": "知识库里有哪些文档？",
+    "category": "action",
+    "setup": [],
+    "expect": { "must_call_tools": ["get_document_status"], "keywords": ["文档"] }
+  },
+  {
+    "q": "帮我生成一份关于 Redis 的快速总结报告",
+    "category": "action",
+    "setup": [],
+    "expect": { "must_call_tools": ["generate_report"] }
+  },
+  {
+    "q": "帮我发一封邮件给 test@example.com，内容为：评测环境测试",
+    "category": "action",
+    "setup": [],
+    "expect": { "interrupt_expected": true, "keywords": ["取消", "拒绝", "未发送", "未发出"] }
+  },
+  {
+    "q": "杭州今天天气怎么样？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "最近 AI 领域有什么值得关注的大新闻？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "2026 年有哪些新发布的手机值得买？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "我刚才让你记的暗号是什么？",
+    "category": "memory",
+    "setup": ["请记住暗号 A7K2"],
+    "expect": { "keywords": ["A7K2"] }
+  },
+  {
+    "q": "刚才那个暗号现在是多少？",
+    "category": "memory",
+    "setup": ["请记住暗号 A7K2", "把暗号更新为 B8L4"],
+    "expect": { "keywords": ["B8L4"] }
+  },
+  {
+    "q": "我刚刚说的测试标记是什么？",
+    "category": "memory",
+    "setup": ["你好，我的测试标记是 M7N3"],
+    "expect": { "keywords": ["M7N3"] }
+  },
+  {
+    "q": "你好",
+    "category": "social",
+    "setup": [],
+    "expect": { "no_cite": true }
+  },
+  {
+    "q": "谢谢你！",
+    "category": "social",
+    "setup": [],
+    "expect": { "no_cite": true }
+  },
+  {
+    "q": "1+1 等于几？",
+    "category": "social",
+    "setup": [],
+    "expect": { "keywords": ["2"], "no_cite": true }
+  }
+]
