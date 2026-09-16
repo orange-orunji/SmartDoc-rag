@@ -88,5 +88,143 @@
     "category": "social",
     "setup": [],
     "expect": { "keywords": ["2"], "no_cite": true }
+  },
+  {
+    "q": "Redis 文档里有哪些关于性能优化的内容？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["性能", "优化"] }
+  },
+  {
+    "q": "GitHub 是什么？主要功能有哪些？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["GitHub", "代码"] }
+  },
+  {
+    "q": "GitHub Actions 自动化发布怎么配置？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["Actions", "发布"] }
+  },
+  {
+    "q": "关于爱情的文档里，斯腾伯格理论说了什么？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["斯腾伯格", "激情"] }
+  },
+  {
+    "q": "爱情文档里说的三个阶段是什么？",
+    "category": "kb",
+    "setup": [],
+    "expect": { "must_cite": true, "keywords": ["激情", "依恋", "承诺"] }
+  },
+  {
+    "q": "帮我删除知识库里的'不存在的测试文件xyz.md'",
+    "category": "action",
+    "setup": [],
+    "expect": { "must_call_tools": ["delete_document"], "keywords": ["未找到", "不存在", "没有找到"] }
+  },
+  {
+    "q": "知识库里跟 Redis 相关的文档有几个？",
+    "category": "action",
+    "setup": [],
+    "expect": { "must_call_tools": ["get_document_status"], "keywords": ["文档"] }
+  },
+  {
+    "q": "帮我生成一份关于 GitHub 的简短总结报告",
+    "category": "action",
+    "setup": [],
+    "expect": { "must_call_tools": ["generate_report"] }
+  },
+  {
+    "q": "再帮我统计一次知识库文档数量",
+    "category": "action",
+    "setup": [],
+    "expect": { "must_call_tools": ["get_document_status"] }
+  },
+  {
+    "q": "把刚才生成的报告转成 Word 格式",
+    "category": "action",
+    "setup": [],
+    "expect": { "observe": true }
+  },
+  {
+    "q": "上海今天气温多少度？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "2026 年国庆节放假安排是怎样的？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "最近有什么值得关注的科技新闻？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "DeepSeek 最新发布的是什么模型？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "美元兑人民币今天的汇率是多少？",
+    "category": "web",
+    "setup": [],
+    "expect": { "web_used": true }
+  },
+  {
+    "q": "你好，我刚才说我的专业是什么？",
+    "category": "memory",
+    "setup": ["你好，我叫小余，是软件工程专业的大三学生"],
+    "expect": { "keywords": ["软件工程"] }
+  },
+  {
+    "q": "你好，我刚才说的咖啡偏好是什么？",
+    "category": "memory",
+    "setup": ["你好，请记住：我的咖啡偏好是无糖拿铁"],
+    "expect": { "keywords": ["无糖"] }
+  },
+  {
+    "q": "你好，最开始让你记的暗号是什么？",
+    "category": "memory",
+    "setup": ["你好，请记住暗号 Z9Y8", "你好，今天的云很好看", "你好，推荐一部电影", "你好，说说你的名字由来", "你好，一周有几天", "你好，星星为什么会眨眼", "你好，推荐一种水果", "你好，什么是编程", "你好，讲讲大城市和小城市的区别", "你好，有什么兴趣爱好推荐", "你好，随便聊聊天气"],
+    "expect": { "observe": true }
+  },
+  {
+    "q": "你好，我刚说的航班号是哪个？",
+    "category": "memory",
+    "setup": ["你好，记住航班号 CA1234", "你好，把航班号改成 MU5678"],
+    "expect": { "keywords": ["MU5678"] }
+  },
+  {
+    "q": "你好，我刚才说我爱吃什么？",
+    "category": "memory",
+    "setup": ["你好，我喜欢吃辣的，尤其火锅"],
+    "expect": { "keywords": ["火锅", "辣"] }
+  },
+  {
+    "q": "哈哈，你太逗了",
+    "category": "social",
+    "setup": [],
+    "expect": { "no_cite": true }
+  },
+  {
+    "q": "辛苦了",
+    "category": "social",
+    "setup": [],
+    "expect": { "no_cite": true }
+  },
+  {
+    "q": "100 除以 4 等于多少？",
+    "category": "social",
+    "setup": [],
+    "expect": { "keywords": ["25"], "no_cite": true }
   }
 ]

@@ -33,9 +33,23 @@ CHECKPOINT_FILE = os.path.join(BASE_DIR, "eval_agent_checkpoint.json")
 CITE_RE = re.compile(r"(【来源|（来源|\(来源|引用来源|来源[:：])")
 TOOL_RE = re.compile(r"\[调用工具[:：]\s*(\w+)")
 
+# 滑动窗口节流：60 秒内最多 8 个请求（服务限流 10/min，留余量）
+_REQ_TIMES = []
+
+
+async def throttle():
+    now = time.time()
+    _REQ_TIMES[:] = [t for t in _REQ_TIMES if now - t < 60]
+    if len(_REQ_TIMES) >= 8:
+        wait = 61 - (now - _REQ_TIMES[0])
+        if wait > 0:
+            await asyncio.sleep(wait)
+    _REQ_TIMES.append(time.time())
+
 
 async def consume(client, path, payload, headers):
     """消费 SSE → {text, tools, interrupt, frames}"""
+    await throttle()
     text, tools, interrupt, frames = "", [], False, 0
     async with client.stream("POST", f"{BASE}{path}", json=payload, headers=headers) as resp:
         if resp.status_code != 200:
@@ -65,6 +79,10 @@ async def consume(client, path, payload, headers):
 
 
 def judge(expect, res):
+    if expect.get("observe"):          # 观察题：不断言内容，但排除请求异常
+        if res["text"].startswith("HTTP"):
+            return (False, [f"请求异常: {res['text'][:20]}"])
+        return (True, [])
     fails = []
     for t in expect.get("must_call_tools", []):
         if t not in res["tools"]:
@@ -88,17 +106,22 @@ def judge(expect, res):
 
 async def run_one(client, headers, item, idx):
     sid = f"eval_{idx:02d}"
-    await client.delete(f"{BASE}/api/chat/session/{sid}", headers=headers)
-    # setup 轮（铺垫记忆，不计分）
-    for s in item.get("setup", []):
-        await consume(client, "/api/chat/stream", {"question": s, "session_id": sid}, headers)
-    # 测试轮
     t0 = time.perf_counter()
-    res = await consume(client, "/api/chat/stream", {"question": item["q"], "session_id": sid}, headers)
-    # 中断题：自动取消并合并恢复流文本
-    if res["interrupt"]:
-        res2 = await consume(client, "/api/chat/resume", {"session_id": sid, "decision": False}, headers)
-        res["text"] += res2["text"]
+    try:
+        await client.delete(f"{BASE}/api/chat/session/{sid}", headers=headers)
+        # setup 轮（铺垫记忆，不计分）
+        for s in item.get("setup", []):
+            await consume(client, "/api/chat/stream", {"question": s, "session_id": sid}, headers)
+        # 测试轮
+        res = await consume(client, "/api/chat/stream", {"question": item["q"], "session_id": sid}, headers)
+        # 中断题：自动取消并合并恢复流文本
+        if res["interrupt"]:
+            res2 = await consume(client, "/api/chat/resume", {"session_id": sid, "decision": False}, headers)
+            res["text"] += res2["text"]
+    except Exception as e:                      # 超时/断连不崩全批，记失败继续
+        return {"idx": idx, "q": item["q"], "category": item["category"],
+                "passed": False, "fails": [f"异常中断: {type(e).__name__}"],
+                "elapsed": round(time.perf_counter() - t0, 1), "tools": [], "head": ""}
     elapsed = time.perf_counter() - t0
     passed, fails = judge(item["expect"], res)
     return {
@@ -168,6 +191,16 @@ async def main():
             p, n = cats[c]
             print(f"  ├─ {c:7s} {p}/{n} ({p / n:.0%})")
     print(f"耗时：平均 {avg:.1f}s | P95 {p95:.1f}s")
+    cat_times = {}
+    for x in results:
+        cat_times.setdefault(x["category"], []).append(x["elapsed"])
+    print("分类延迟（联网/报告类拖 P95，需拆开看）：")
+    for c in ["kb", "action", "web", "memory", "social"]:
+        if c in cat_times:
+            ts = sorted(cat_times[c])
+            c_avg = sum(ts) / len(ts)
+            c_p95 = ts[min(len(ts) - 1, int(len(ts) * 0.95))]
+            print(f"  ├─ {c:7s} 均 {c_avg:.1f}s | P95 {c_p95:.1f}s")
     failed = [x for x in results if not x["passed"]]
     if failed:
         print("失败明细：")
