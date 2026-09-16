@@ -1,10 +1,11 @@
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage , trim_messages
 from langgraph.graph import StateGraph, MessagesState ,START , END
 from langgraph.prebuilt import  ToolNode
 from langchain_openai import ChatOpenAI
 from functools import lru_cache
 
 import re
+import logging
 
 from app.config.settings import get_settings
 from app.services.hyde import adaptive_retrieve
@@ -73,6 +74,16 @@ _ACTION_PATTERNS = [
 ]
 _RETRIEVAL_MIN_SCORE = 0.1      # 前置检索质量阈值：低于此分视为"无有效结果"→ 联网兜底
 
+# 裁剪消息
+_trimmer = trim_messages(
+    max_tokens=20,   # 配合 token_counter=len —— 语义是"最多保留 20 条消息"
+    token_counter=len,
+    strategy="last",#策略: 保留最新的
+    start_on="human",# ★ 从 human 起头（工具对/轮次完整性）
+    allow_partial=False,
+    include_system=False, # system 是节点里现拼的，不在裁剪范围
+)
+
 # 注入检查点，用于保存中间状态，防止无状态的图被缓存
 def set_checkpointer(cp):
     global _checkpointer
@@ -119,7 +130,9 @@ async def call_model(state: AgentState) -> dict:
     web = state.get("web_context", "")
     if web:
         system += f"\n\n【联网搜索结果】\n{web}"
-    msgs = [SystemMessage(content=system)] + state["messages"]
+    msgs = [SystemMessage(content=system)] + _trimmer.invoke(state["messages"])
+    logger = logging.getLogger("rag.agent")
+    logger.info("记忆窗口 | 发送=%d 条 | 全量=%d 条", len(msgs), len(state["messages"]))
     response = await _llm.ainvoke(msgs)
     return {"messages": [response]}
 
