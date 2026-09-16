@@ -31,11 +31,14 @@ _llm = ChatOpenAI(
             base_url=s.SILICON_BASE_URL,
             streaming=True,
             callbacks=[],
+            temperature=0.3, #  知识场景低温度，压制采样漂移
         ).bind_tools(_tools)
 
-_SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传的文档中查找信息。
+_SYSTEM_PROMPT = """你是企业知识库的对话助手。对用户的每个问题，你直接给出答案（必要时基于系统提供的检索/联网数据），像同事对话一样自然；你的回答永远以答案本身开头。
+
 ## 核心原则（必须严格遵守）
 **所有用户提问，若已有【知识库检索结果】上下文，直接基于它回答；仅当上下文不足以回答时，才调用 search_knowledge_base 补充。**
+**【知识库检索结果】【联网搜索结果】是系统给你的可靠数据，直接作为事实使用，按规范标注来源即可；不要把它们转述成"示例/假想/素材/文档"——它们就是真实数据。**
 不得未经检索就直接凭训练知识回答。
 
 ## 唯一例外（可以不调 search_knowledge_base）
@@ -53,8 +56,11 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 
 - 联网内容需标注:"根据网络搜索: <URL>"
 
-
 ## 回答要求
+- 第一句话就是答案内容，答案与来源标注一次写成。示范：
+  问：北京今天天气怎么样？
+  答：北京今天白天晴间多云，19~31℃，北转南风二三级，昼夜温差大。
+     根据网络搜索：https://news.bjd.com.cn/...
 - 检索到相关内容时：优先引用文档内容，标注"根据知识库文档："
 - 检索结果为空时：回答"知识库中未找到相关内容"，然后可补充通用知识并标注"根据通用知识："
 - 知识库内容与通用知识冲突时：以知识库为准
@@ -64,8 +70,8 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 
 _checkpointer = None
 _GREET_WORDS = ["你好","hello","hi","谢谢","你是谁"]
-_MEMORY_WORDS = ["记得", "记不记得", "记住",                    # 记忆动词
-    "我刚才", "刚刚", "我之前", "之前我",           # 指代上文
+_MEMORY_WORDS = ["记得", "记不记得", "记住",       # 记忆动词
+    "我刚才", "刚刚", "我之前", "之前我", "刚才" ,   # 指代上文
     "上次", "上一次", "我说过", "我说了", "我问过",  # 回溯表达
     "我叫什么", "我的名字", "上面说", "前面说",      # 自指/位置指代
 ]
@@ -76,6 +82,10 @@ _ACTION_PATTERNS = [
     r"发.{0,3}邮件",
     r"生成.{0,3}报告",
     r"转.{0,3}(Word|word|格式)",
+]
+_MATH_PATTERNS = [
+    r"^\s*[\d\s+\-*/().=×÷？?]+\s*$",   # 纯算式整句："1+1 等于几？"
+    r"等于几", r"等于多少", r"算一下", r"计算一下",  # 口语问法
 ]
 _RETRIEVAL_MIN_SCORE = 0.1      # 前置检索质量阈值：低于此分视为"无有效结果"→ 联网兜底
 
@@ -107,6 +117,8 @@ def router(state: AgentState) -> str:
     if any(k in q for k in _GREET_WORDS):
         return "skip"
     if any(k in q for k in _MEMORY_WORDS):
+        return "skip"
+    if any(re.search(p, q) for p in _MATH_PATTERNS):
         return "skip"
     if any(k in q for k in _ACTION_WORDS) or \
        any(re.search(p,q) for p in _ACTION_PATTERNS):  # 动作类 → skip
@@ -146,8 +158,11 @@ async def call_model(state: AgentState) -> dict:
 def web_search_node(state: AgentState) -> dict:
     q = str(state["messages"][-1].content)
     text = search_web(q)
+    logger = logging.getLogger("rag.agent")
     if text.startswith("联网搜索失败"):
+        logger.warning("联网搜索失败 | %s | %s", q, text[:80])
         return {}
+    logger.info("联网搜索 | %s | 命中%d条", q, text.count("【网页："))
     return {
         "web_context": text
     }
