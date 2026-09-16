@@ -63,12 +63,25 @@ function authHeaders() {
     return token.value ? { Authorization: 'Bearer ' + token.value } : {}
 }
 
+/** 统一鉴权请求封装：自动附带 token；遇 401 清除登录态（自动回登录页）并抛出 */
+async function apiFetch(url, options = {}) {
+    const resp = await fetch(url, {
+        ...options,
+        headers: { ...authHeaders(), ...(options.headers || {}) },
+    })
+    if (resp.status === 401) {
+        logout()
+        throw new Error('登录已过期，请重新登录')
+    }
+    return resp
+}
+
 // ── 用户资料 ──
 
 /** 拉取当前用户资料（登录后/进入聊天页时调用） */
 async function fetchProfile() {
     try {
-        const resp = await fetch('/api/auth/me', { headers: authHeaders() })
+        const resp = await apiFetch('/api/auth/me')
         if (!resp.ok) return
         const data = await resp.json()
         setProfileCache(data.display_name || '', data.avatar || '', data.bio || '')
@@ -79,9 +92,9 @@ async function fetchProfile() {
 
 /** 更新昵称与个性签名 */
 async function updateProfile({ display_name, bio: newBio }) {
-    const resp = await fetch('/api/auth/me', {
+    const resp = await apiFetch('/api/auth/me', {
         method: 'PUT',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ display_name, bio: newBio }),
     })
     const data = await resp.json().catch(() => ({}))
@@ -93,9 +106,8 @@ async function updateProfile({ display_name, bio: newBio }) {
 async function uploadAvatar(file) {
     const form = new FormData()
     form.append('file', file)
-    const resp = await fetch('/api/auth/me/avatar', {
+    const resp = await apiFetch('/api/auth/me/avatar', {
         method: 'POST',
-        headers: authHeaders(),
         body: form,
     })
     const data = await resp.json().catch(() => ({}))
@@ -106,9 +118,9 @@ async function uploadAvatar(file) {
 
 /** 修改密码（需原密码验证） */
 async function changePassword(oldPassword, newPassword) {
-    const resp = await fetch('/api/auth/me/password', {
+    const resp = await apiFetch('/api/auth/me/password', {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     })
     const data = await resp.json().catch(() => ({}))
@@ -118,7 +130,7 @@ async function changePassword(oldPassword, newPassword) {
 export function useAuth() {
     return {
         token, username, authed, shownName, displayName, avatarUrl, bio,
-        setAuth, logout, loginOrRegister, authHeaders,
+        setAuth, logout, loginOrRegister, authHeaders, apiFetch,
         fetchProfile, updateProfile, uploadAvatar, changePassword,
     }
 }

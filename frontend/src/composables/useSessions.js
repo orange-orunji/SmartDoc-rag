@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { useAuth } from './useAuth'
 import { useMessages } from './useMessages'
 
-const { username, authHeaders } = useAuth()
+const { username, apiFetch } = useAuth()
 const { clearMessages, loadHistory, checkPendingInterrupt } = useMessages()
 
 const sessions = ref([])
@@ -53,7 +53,7 @@ function nowStr() {
 async function loadSessions() {
     loadPinned()
     try {
-        const resp = await fetch('/api/chat/sessions', { headers: authHeaders() })
+        const resp = await apiFetch('/api/chat/sessions')
         if (!resp.ok) return
         const data = await resp.json()
         let list = data.sessions || []
@@ -137,9 +137,8 @@ async function switchSession(sessionId) {
 
 /** 删除会话（后端业务码模式：HTTP 200 + code 字段） */
 async function deleteSession(sessionId) {
-    const resp = await fetch('/api/chat/session/' + encodeURIComponent(sessionId), {
+    const resp = await apiFetch('/api/chat/session/' + encodeURIComponent(sessionId), {
         method: 'DELETE',
-        headers: authHeaders(),
     })
     const data = await resp.json().catch(() => ({}))
     if (data.code && data.code !== 200) {
@@ -153,9 +152,9 @@ async function deleteSession(sessionId) {
 
 /** 重命名会话标题（后端仅改显示标题，session_id 与记忆不受影响） */
 async function renameSession(sessionId, newName) {
-    const resp = await fetch('/api/chat/session/' + encodeURIComponent(sessionId) + '/rename', {
+    const resp = await apiFetch('/api/chat/session/' + encodeURIComponent(sessionId) + '/rename', {
         method: 'PUT',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_name: newName }),
     })
     const data = await resp.json().catch(() => ({}))

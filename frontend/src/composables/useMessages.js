@@ -1,7 +1,7 @@
 import { ref, reactive } from 'vue'
 import { useAuth } from './useAuth'
 
-const { authHeaders } = useAuth()
+const { apiFetch } = useAuth()
 
 // 消息列表：历史消息 { role, content }；流中的"活消息"额外带 tips/streaming/approval
 const messages = ref([])
@@ -30,9 +30,7 @@ async function loadHistory(sessionId) {
     awaitingApproval.value = false
     if (!sessionId) return
     try {
-        const resp = await fetch('/api/chat/history/' + encodeURIComponent(sessionId), {
-            headers: authHeaders(),
-        })
+        const resp = await apiFetch('/api/chat/history/' + encodeURIComponent(sessionId))
         if (!resp.ok) return
         const data = await resp.json()
         // 数据归一化：后端历史接口 role 为 'human'/'assistant'，统一成 'user'/'assistant'
@@ -100,9 +98,9 @@ async function sendMessage(question, sessionId) {
     const t0 = performance.now()
 
     try {
-        const resp = await fetch('/api/chat/stream', {
+        const resp = await apiFetch('/api/chat/stream', {
             method: 'POST',
-            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ question, session_id: sessionId }),
         })
         if (!resp.ok) {
@@ -138,9 +136,9 @@ async function sendResume(msg, decision, sessionId) {
     const t0 = performance.now()
 
     try {
-        const resp = await fetch('/api/chat/resume', {
+        const resp = await apiFetch('/api/chat/resume', {
             method: 'POST',
-            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session_id: sessionId, decision }),
         })
         if (!resp.ok) {
@@ -168,9 +166,8 @@ async function sendResume(msg, decision, sessionId) {
 async function checkPendingInterrupt(sessionId) {
     if (!sessionId) return
     try {
-        const resp = await fetch('/api/chat/pending/' + encodeURIComponent(sessionId), {
+        const resp = await apiFetch('/api/chat/pending/' + encodeURIComponent(sessionId), {
             method: 'POST',
-            headers: authHeaders(),
         })
         if (!resp.ok) return
         const data = await resp.json()

@@ -12,7 +12,7 @@ const emit = defineEmits(['toggle-sidebar'])
 
 const { currentSessionId, loadSessions, createSession, titleOf } = useSessions()
 const { messages, isStreaming, awaitingApproval, loadHistory, sendMessage, sendResume, checkPendingInterrupt } = useMessages()
-const { shownName, authHeaders, fetchProfile } = useAuth()
+const { shownName, apiFetch, fetchProfile } = useAuth()
 const { theme, toggleTheme } = useTheme()
 const { show: toast } = useToast()
 
@@ -225,7 +225,7 @@ async function uploadFile(file) {
     try {
         const form = new FormData()
         form.append('file', file)
-        const resp = await fetch('/api/document/upload', { method: 'POST', headers: authHeaders(), body: form })
+        const resp = await apiFetch('/api/document/upload', { method: 'POST', body: form })
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data.detail || data.message || '上传失败')
         const taskId = data.data?.task_id
@@ -240,7 +240,7 @@ async function pollUpload(taskId, filename) {
     for (let i = 0; i < 150; i++) {   // 最长轮询 5 分钟
         await new Promise((r) => setTimeout(r, 2000))
         try {
-            const resp = await fetch(`/api/document/upload/status/${taskId}`, { headers: authHeaders() })
+            const resp = await apiFetch(`/api/document/upload/status/${taskId}`)
             const data = await resp.json()
             const st = data.data
             if (!st) continue
@@ -261,7 +261,7 @@ async function pollUpload(taskId, filename) {
 // ── 知识库概览（空状态卡片） ──
 async function loadKbStats() {
     try {
-        const resp = await fetch('/api/document/stats', { headers: authHeaders() })
+        const resp = await apiFetch('/api/document/stats')
         if (!resp.ok) return
         const data = await resp.json()
         kbStats.value = data.data || null
