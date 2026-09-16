@@ -64,6 +64,11 @@ _SYSTEM_PROMPT = """你是一个企业知识库助手，帮助用户从已上传
 
 _checkpointer = None
 _GREET_WORDS = ["你好","hello","hi","谢谢","你是谁"]
+_MEMORY_WORDS = ["记得", "记不记得", "记住",                    # 记忆动词
+    "我刚才", "刚刚", "我之前", "之前我",           # 指代上文
+    "上次", "上一次", "我说过", "我说了", "我问过",  # 回溯表达
+    "我叫什么", "我的名字", "上面说", "前面说",      # 自指/位置指代
+]
 _ACTION_WORDS = ["删除", "删掉", "移除", "清理", "去掉", "上传", "存入",
                  "入库", "保存", "导出", "有哪些文档", "多少文档","多少个文档","文档数",
                  "帮我发送这份报告", "帮我统计一下"]
@@ -100,6 +105,8 @@ class AgentState(MessagesState):
 def router(state: AgentState) -> str:
     q = str(state["messages"][-1].content)
     if any(k in q for k in _GREET_WORDS):
+        return "skip"
+    if any(k in q for k in _MEMORY_WORDS):
         return "skip"
     if any(k in q for k in _ACTION_WORDS) or \
        any(re.search(p,q) for p in _ACTION_PATTERNS):  # 动作类 → skip

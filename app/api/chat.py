@@ -22,7 +22,7 @@ from app.utils.auth import get_current_user
 from app.utils.redis_client import redis_client_connect as redis
 from app.utils.semantic_cache import semantic_cache
 from app.config.settings import get_settings
-from app.agent.agent import _ACTION_WORDS
+from app.agent.agent import _ACTION_WORDS , _MEMORY_WORDS
 
 logger = logging.getLogger("rag.chat")
 limiter = Limiter(key_func=get_remote_address)
@@ -40,6 +40,11 @@ def _sse_encode(text: str) -> str:
     """
     return json.dumps(text, ensure_ascii=False)
 
+_MEMORY_WORDS_FROM_AGENT = _MEMORY_WORDS
+
+def _is_memory_request(question: str) -> bool:
+    """记忆类问句：答案依赖对话历史，禁用缓存（读写双侧）"""
+    return any(w in question for w in _MEMORY_WORDS)
 
 def _is_action_request(question:str) -> bool:
     """判断问题是否包含动作词"""
@@ -100,7 +105,7 @@ def _generate_session_title(question: str) -> str:
 async def stream_chat(request: Request, body: ChatRequest, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["user_id"])
     t_start = time.time()
-    if redis and not _is_action_request(body.question):
+    if redis and not _is_action_request(body.question) and not _is_memory_request(body.question):
         # 1. 语义相似度缓存
         cached_answer = semantic_cache.lookup(body.question, user_id)
         if cached_answer:
@@ -210,7 +215,7 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
             else:
                 yield f"data: {_sse_encode('【系统错误】' + str(e))}\n\n"
         finally:
-            if all_request and redis and not tool_times: # not tool_times 表示没有调用工具，才进行缓存
+            if all_request and redis and not tool_times and not _is_memory_request(body.question): # not tool_times 表示没有调用工具，才进行缓存
                 question_hash = hashlib.md5(body.question.encode()).hexdigest()
                 user_key = f"{s.REDIS_USER_PREFIX}:{user_id}:{question_hash}"
                 redis.setex(name=user_key, value=all_request, time=s.REDIS_EXPIRE)
