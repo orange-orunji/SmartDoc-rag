@@ -188,16 +188,25 @@ async def stream_chat(request: Request, body: ChatRequest, current_user: dict = 
                     frame_count += 1
                     yield f"data: {_sse_encode(text)}\n\n"
                 elif e == "on_tool_end":
-                    # 检测报告生成 → 推送下载链接（直接推 HTML，marked 会原样渲染）
+                    # 检测报告生成 → 推送下载链接（output 可能是 ToolMessage，取其 content）
                     tool_name = event.get("name", "?")
                     cost = time.time() - tool_times.get(tool_name, t_start)
                     output = event["data"].get("output")
                     logger.info("工具调用结束 | tool=%s | 耗时=%.2fs", tool_name, cost)
-                    if output and "[REPORT_FILE]" in str(output):
-                        filename = str(output).split("[REPORT_FILE]")[1].split("\n")[0]
-                        dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
-                        all_request += dl_html  # 持久化到历史
-                        yield f"data: {_sse_encode(dl_html)}\n\n"
+                    raw = getattr(output, "content", output)
+                    if isinstance(raw, list):
+                        raw = "".join(p.get("text", "") for p in raw if isinstance(p, dict))
+                    raw = str(raw)
+                    if "[REPORT_FILE]" in raw:
+                        filename = raw.split("[REPORT_FILE]")[1].split("\n")[0].strip()
+                        ok = bool(filename) and all(c.isalnum() or c in "._-" for c in filename) \
+                            and filename.endswith((".md", ".docx", ".txt"))
+                        if ok:
+                            dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
+                            all_request += dl_html  # 持久化到历史
+                            yield f"data: {_sse_encode(dl_html)}\n\n"
+                        else:
+                            logger.warning("报告文件名解析异常，跳过链接推送 | %s", filename[:80])
 
             # 组装中断帧，获取工具中的payload返回给前端
             snap = await chain.aget_state(_config)
@@ -356,15 +365,25 @@ async def resume_interrupt(request:Request,resume_request: ResumeRequest, curren
                     frame_count += 1
                     yield f"data: {_sse_encode(text)}\n\n"
                 elif e == "on_tool_end":
+                    # 检测报告生成 → 推送下载链接（resume 分支；output 可能是 ToolMessage）
                     tool_name = event.get("name", "?")
                     cost = time.time() - tool_times.get(tool_name, t_start)
                     output = event["data"].get("output")
                     logger.info("工具调用结束 | tool=%s | 耗时=%.2fs", tool_name, cost)
-                    if output and "[REPORT_FILE]" in str(output):
-                        filename = str(output).split("[REPORT_FILE]")[1].split("\n")[0]
-                        dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
-                        all_request += dl_html  # 持久化到历史
-                        yield f"data: {_sse_encode(dl_html)}\n\n"
+                    raw = getattr(output, "content", output)
+                    if isinstance(raw, list):
+                        raw = "".join(p.get("text", "") for p in raw if isinstance(p, dict))
+                    raw = str(raw)
+                    if "[REPORT_FILE]" in raw:
+                        filename = raw.split("[REPORT_FILE]")[1].split("\n")[0].strip()
+                        ok = bool(filename) and all(c.isalnum() or c in "._-" for c in filename) \
+                            and filename.endswith((".md", ".docx", ".txt"))
+                        if ok:
+                            dl_html = f"<p><a href='/reports/{filename}' download class='download-link'>📥 下载报告：{filename}</a></p>"
+                            all_request += dl_html  # 持久化到历史
+                            yield f"data: {_sse_encode(dl_html)}\n\n"
+                        else:
+                            logger.warning("报告文件名解析异常，跳过链接推送 | %s", filename[:80])
 
             # 组装中断帧，获取工具中的payload返回给前端
             snap = await chain.aget_state(_config)

@@ -27,7 +27,7 @@
     "q": "帮我生成一份关于 Redis 的快速总结报告",
     "category": "action",
     "setup": [],
-    "expect": { "must_call_tools": ["generate_report"] }
+    "expect": { "must_call_tools": ["generate_report"], "keywords": ["/reports/"] }
   },
   {
     "q": "帮我发一封邮件给 test@example.com，内容为：评测环境测试",
@@ -135,7 +135,7 @@
     "q": "帮我生成一份关于 GitHub 的简短总结报告",
     "category": "action",
     "setup": [],
-    "expect": { "must_call_tools": ["generate_report"] }
+    "expect": { "must_call_tools": ["generate_report"], "keywords": ["/reports/"] }
   },
   {
     "q": "再帮我统计一次知识库文档数量",
